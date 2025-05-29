@@ -43,16 +43,15 @@ from keyboards import (add_graphic_btn, add_or_create_close_kb,
 
 from bot22 import bot
 
-from .storage import redis_client
-from .any import (generate_pretty_amount,
+from utils.storage import redis_client
+from utils.any import (generate_pretty_amount,
                   generate_sale_for_price,
                   add_message_to_delete_dict, generate_sale_for_price_popular_product,
                   send_data_to_yandex_metica)
-from .pics import DEFAULT_PRODUCT_LIST_PHOTO_ID, DEFAULT_PRODUCT_PHOTO_ID
-from .cities import city_index_dict
-from .exc import OzonAPICrashError, OzonProductExistsError, WbAPICrashError, WbProductExistsError
+from utils.cities import city_index_dict
+from utils.exc import OzonAPICrashError, OzonProductExistsError, WbAPICrashError, WbProductExistsError
 
-from config import DEV_ID, SUB_DEV_ID, WB_API_URL, OZON_API_URL, JOB_STORE_URL, TEST_PHOTO_ID
+from config import DEV_ID, SUB_DEV_ID, WB_API_URL, OZON_API_URL, JOB_STORE_URL, TEST_PHOTO_ID, DEFAULT_PRODUCT_LIST_PHOTO_ID, DEFAULT_PRODUCT_PHOTO_ID
 
 
 # Настройка хранилища задач

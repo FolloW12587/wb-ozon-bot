@@ -46,14 +46,13 @@ from .scheduler import (push_check_ozon_price,
                              add_task_to_delete_old_message_for_users)
 from .storage import redis_client
 from .any import send_data_to_yandex_metica
-from .pics import DEFAULT_PRODUCT_LIST_PHOTO_ID
 
 from keyboards import (add_back_btn,
                        add_pagination_btn, create_back_to_product_btn,
                        create_or_add_exit_btn,
                        create_product_list_for_page_kb, new_add_pagination_btn, new_create_product_list_for_page_kb)
 
-from config import DEV_ID, TEST_PHOTO_LIST
+from config import DEV_ID, TEST_PHOTO_LIST, DEFAULT_PRODUCT_LIST_PHOTO_ID
 
 
 DEFAULT_PAGE_ELEMENT_COUNT = 5
