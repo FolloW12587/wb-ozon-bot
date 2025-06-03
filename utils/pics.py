@@ -33,7 +33,7 @@ class ImageManager:
         if self.config.default_product_photo:
             return self.config.default_product_photo
 
-        path = os.path.join(self.images_dir, "default_product_photo.jpg")
+        path = os.path.join(self.images_dir, "default_product_photo.png")
         if not os.path.exists(path):
             return None
 
@@ -87,7 +87,7 @@ class ImageManager:
 
     def _get_question_images(self, question: str) -> list[str]:
         """Собирает локальные пути по шаблону question_n.jpg"""
-        pattern = re.compile(rf"{re.escape(question)}_(\d+)\.jpe?g", re.IGNORECASE)
+        pattern = re.compile(rf"{re.escape(question)}_(\d+)\.(?:jpe?g|png)", re.IGNORECASE)
         files = []
 
         for fname in os.listdir(self.images_dir):
