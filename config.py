@@ -7,7 +7,7 @@ from sqlalchemy.engine import URL
 
 load_dotenv()
 
-DEBUG = True if os.environ.get("DEBUG", "0") == "1" else False
+DEBUG = os.environ.get("DEBUG", "0") == "1"
 DEV_ID = os.environ.get('DEV_ID')
 SUB_DEV_ID = os.environ.get('SUB_DEV_ID')
 
@@ -16,19 +16,18 @@ WEBAPP_URL_ONE = os.environ.get('WEBAPP_URL_ONE')
 WEBAPP_URL_TWO = os.environ.get('WEBAPP_URL_TWO')
 WEBAPP_URL_THREE = os.environ.get('WEBAPP_URL_THREE')
 
+HOST = os.environ.get("HOST")
+PORT = os.environ.get("PORT")
 
 PUBLIC_URL = os.environ.get('PUBLIC_URL')
 
 
-# JOB_STORE_URL = os.environ.get('JOB_STORE_URL')
-
-
 #DATABASE
-DB_USER = os.environ.get('DB_USER')
+DB_USER = os.environ.get('POSTGRES_USER')
 DB_PASS = os.environ.get('POSTGRES_PASSWORD')
 DB_HOST = os.environ.get('POSTGRES_HOST')
-DB_PORT = os.environ.get('DB_PORT')
-DB_NAME = os.environ.get('DB_NAME')
+DB_PORT = os.environ.get('POSTGRES_PORT')
+DB_NAME = os.environ.get('POSTGRES_DB')
 
 JOB_STORE_URL= f'postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
 
@@ -58,6 +57,8 @@ _db_url = URL.create(
 # API_HASH = os.environ.get('API_HASH')
 
 DUMP_CHAT = os.getenv("DUMP_CHAT")
+ADMIN_IDS = os.getenv("ADMIN_IDS", '')
+ADMIN_IDS = list(map(int, ADMIN_IDS.split(','))) if ADMIN_IDS else []
 
 #Redis
 REDIS_HOST = os.environ.get('REDIS_HOST')
@@ -79,10 +80,6 @@ YANDEX_TOKEN = os.environ.get('YANDEX_TOKEN')
 WB_API_URL = os.environ.get('WB_API_URL')
 OZON_API_URL = os.environ.get('OZON_API_URL')
 
-TEST_PHOTO_ID = os.getenv("TEST_PHOTO_ID")
-TEST_PHOTO_LIST = os.getenv("TEST_PHOTO_LIST")
-DEFAULT_PRODUCT_PHOTO_ID = os.getenv("DEFAULT_PRODUCT_PHOTO_ID")
-DEFAULT_PRODUCT_LIST_PHOTO_ID = os.getenv("DEFAULT_PRODUCT_LIST_PHOTO_ID")
 
 FAKE_NOTIFICATION_SECRET = os.environ.get('FAKE_NOTIFICATION_SECRET')
 

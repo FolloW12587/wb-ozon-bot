@@ -55,7 +55,7 @@ from utils.cities import city_index_dict
 from utils.exc import OzonAPICrashError, OzonProductExistsError, WbAPICrashError, WbProductExistsError
 from utils.scheduler import new_check_subscription_limit, new_save_product, save_popular_product, scheduler, try_add_product_price_to_db, update_last_send_price_by_user_product
 
-from config import DEV_ID, SUB_DEV_ID, WB_API_URL, OZON_API_URL, JOB_STORE_URL, TEST_PHOTO_ID, DEFAULT_PRODUCT_LIST_PHOTO_ID, DEFAULT_PRODUCT_PHOTO_ID
+from config import DEV_ID, SUB_DEV_ID, WB_API_URL, OZON_API_URL, JOB_STORE_URL
 
 
 

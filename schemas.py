@@ -56,16 +56,11 @@ class FAQPicDict(RootModel[dict[str, list[str]]]):
 
 
 class ImageConfig(BaseModel):
+    default_product_photo: str = ""
+    default_product_list_photo: str = ""
     start_pic: str = ""
     faq_pic_dict: FAQPicDict = FAQPicDict({})
 
-    @property
-    def default_product_photo_id(self) -> str:
-        return config.DEFAULT_PRODUCT_PHOTO_ID
-
-    @property
-    def default_product_list_photo_id(self) -> str:
-        return config.DEFAULT_PRODUCT_LIST_PHOTO_ID
 
     @classmethod
     def load(cls) -> "ImageConfig":

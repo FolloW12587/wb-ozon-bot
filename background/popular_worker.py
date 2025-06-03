@@ -13,13 +13,13 @@ from config import REDIS_HOST, REDIS_PASSWORD, JOB_STORE_URL
 
 
 async def startup(ctx):
-    # jobstores = {
-    #     'sqlalchemy': SQLAlchemyJobStore(url=JOB_STORE_URL),
-    # }
+    jobstores = {
+        'sqlalchemy': SQLAlchemyJobStore(url=JOB_STORE_URL),
+    }
 
-    # scheduler = AsyncIOScheduler(jobstores=jobstores)
+    scheduler = AsyncIOScheduler(jobstores=jobstores)
 
-    # ctx['scheduler'] = scheduler
+    ctx['scheduler'] = scheduler
     print("Worker is starting up...")
 
 
@@ -35,7 +35,7 @@ class WorkerSettings:
         push_check_ozon_popular_product,
         push_check_wb_popular_product,
         # periodic_delete_old_message,
-        # add_popular_product,
+        add_popular_product,
     ]
     on_startup = startup
     on_shutdown = shutdown

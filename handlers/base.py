@@ -1,5 +1,7 @@
+import asyncio
 from datetime import datetime, timedelta
 from math import ceil
+import os
 
 import pytz
 
@@ -28,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
+import config
 from keyboards import (
     create_back_to_product_btn,
     create_or_add_exit_faq_btn,
@@ -55,6 +58,7 @@ from utils.exc import NotEnoughGraphicData
 
 from utils.handlers import (
     DEFAULT_PAGE_ELEMENT_COUNT,
+    add_popular_product_to_db,
     check_input_link,
     delete_prev_subactive_msg,
     generate_graphic,
@@ -163,17 +167,6 @@ async def start(
 
     except Exception as ex:
         print(ex)
-
-
-# @main_router.message(Command('test_excel'))
-# async def test_excel(message: types.Message | types.CallbackQuery,
-#                             state: FSMContext,
-#                             session: AsyncSession,
-#                             bot: Bot,
-#                             scheduler: AsyncIOScheduler,
-#                             redis_pool: ArqRedis):
-#     asyncio.create_task(add_popular_product_to_db(redis_pool))
-#     await message.answer(text='run adding...')
 
 
 # @main_router.message(Command('update_sale_popular'))
@@ -2369,6 +2362,33 @@ async def photo_test(
 ):
     print(message.photo)
     print("*" * 10)
+
+
+@main_router.message(
+    F.content_type == types.ContentType.DOCUMENT,
+    F.from_user.id.in_(config.ADMIN_IDS),
+)
+async def add_excel(message: types.Message, bot: Bot, redis_pool: ArqRedis):
+    print("Checking file")
+    document: types.Document = message.document
+    filename = document.file_name
+
+    # Проверка расширения
+    if not filename.lower().endswith(".xlsx"):
+        await message.reply("Пожалуйста, отправьте файл с расширением .xlsx")
+        return
+
+    # Получение файла от Telegram
+    file = await message.bot.get_file(document.file_id)
+
+    # Скачивание
+    dest_path = os.path.join(config.DATA_DIR, filename)
+    print("downloading file")
+    await bot.download_file(file.file_path, destination=dest_path)
+    asyncio.create_task(
+        add_popular_product_to_db(redis_pool, dest_path, message.chat.id)
+    )
+    await message.answer(text="run adding...")
 
 
 @main_router.message(F.content_type == types.ContentType.TEXT)

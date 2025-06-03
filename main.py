@@ -22,7 +22,7 @@ from utils.utm import add_utm_to_db
 
 from schemas import UTMSchema
 
-from config import PUBLIC_URL, FAKE_NOTIFICATION_SECRET
+from config import PUBLIC_URL, FAKE_NOTIFICATION_SECRET, HOST, PORT
 
 from handlers.base import main_router
 
@@ -47,7 +47,7 @@ app.add_middleware(
 
 event_loop = asyncio.new_event_loop()
 asyncio.set_event_loop(event_loop)
-config = Config(app=app, loop=event_loop, workers=2, host="0.0.0.0", port=8001)
+config = Config(app=app, loop=event_loop, workers=2, host=HOST, port=int(PORT))
 server = Server(config)
 
 
