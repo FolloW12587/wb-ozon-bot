@@ -410,9 +410,9 @@ async def new_push_check_wb_price(cxt,
                     _text = 'цена не изменилась'
                     print(f'{_text} user {user_id} product {name}')
                     
-                    if int(user_id) == int(DEV_ID):
-                        await bot.send_message(chat_id=user_id,
-                                            text=f'{_text} user {user_id} product {name}')
+                    # if int(user_id) == int(DEV_ID):
+                    #     await bot.send_message(chat_id=user_id,
+                    #                         text=f'{_text} user {user_id} product {name}')
                     return
                 
                 else:
