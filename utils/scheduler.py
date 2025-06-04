@@ -20,7 +20,7 @@ from apscheduler.job import Job
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import insert, select, and_, update, func, desc
+from sqlalchemy import insert, select, and_, text, update, func, desc
 
 from db.base import (
     Category,
@@ -2779,6 +2779,41 @@ async def startup_update_scheduler_jobs(scheduler: AsyncIOScheduler):
 
         # job.modify(func=modify_func,
         #         trigger=scheduler_interval)
+
+
+async def sync_popular_product_jobs(scheduler: AsyncIOScheduler):
+    async for session in get_session():
+        result = await session.execute(
+            text(r"SELECT id FROM apscheduler_jobs where id like '%popular%';")
+        )
+        existing_pp_ids = list(map(lambda r: int(r[0].split("_")[-1]), result))
+        print(existing_pp_ids)
+        popular_products_stmt = (
+            select(PopularProduct.id, Product.product_marker)
+            .join(Product, PopularProduct.product_id == Product.id)
+            .where(~PopularProduct.id.in_(existing_pp_ids))
+        )
+        print(popular_products_stmt)
+        result = await session.execute(popular_products_stmt)
+        popular_products_list = result.all()
+        print(popular_products_list)
+        for popular_product_data in popular_products_list:
+            pp_id, marker = popular_product_data
+
+            job_id = f"popular_{marker}_{pp_id}"
+            scheduler.add_job(
+                func=background_task_wrapper,
+                trigger="interval",
+                hours=2,
+                id=job_id,
+                coalesce=True,
+                args=(
+                    f"push_check_{marker}_popular_product",
+                    pp_id,
+                ),  # func_name, *args
+                kwargs={"_queue_name": "arq:popular"},  # _queue_name
+                jobstore="sqlalchemy",
+            )
 
 
 async def add_product_task(user_data: dict):
