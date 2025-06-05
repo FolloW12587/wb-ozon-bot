@@ -36,6 +36,7 @@ from db.base import (Category, ChannelLink, OzonPunkt, PopularProduct, Product, 
                      UserProductJob,
                      ProductPrice)
 
+from db.repository.popular_product import PopularProductRepository
 from keyboards import (add_graphic_btn,
                        add_or_create_close_kb,
                        create_remove_and_edit_sale_kb,
@@ -513,205 +514,219 @@ async def add_popular_product(cxt,
                 print(_text)
 
 
-async def push_check_ozon_popular_product(cxt,
-                                        product_id: int):
-    
-    print(f'new фоновая задача ozon (популярный товар)')
-
+async def push_check_ozon_popular_product(cxt, product_id: int):
     async for session in get_session():
         async with session as _session:
+            await __push_check_ozon_popular_product(_session, product_id)
             try:
-                query = (
-                    select(PopularProduct)
-                    .options(
-                        selectinload(PopularProduct.product),
-                        selectinload(PopularProduct.category)
-                            .selectinload(Category.channel_links)
-                    )
-                    .where(PopularProduct.id == int(product_id))
-                )
+                await _session.close()
+            except Exception:
+                pass
 
-                res = await _session.execute(query)
 
-                popular_product = res.scalar_one_or_none()
-            finally:
-                try:
-                    await _session.close()
-                except Exception:
-                    pass
+async def __push_check_ozon_popular_product(session: AsyncSession, product_id: int):
+    print('new фоновая задача ozon (популярный товар)')
+    popular_product_repo = PopularProductRepository(session)
+
+    query = (
+        select(PopularProduct)
+        .options(
+            selectinload(PopularProduct.product),
+            selectinload(PopularProduct.category)
+                .selectinload(Category.channel_links)
+        )
+        .where(PopularProduct.id == int(product_id))
+    )
+
+    res = await session.execute(query)
+
+    popular_product = res.scalar_one_or_none()
+
     if not popular_product:
         print('wtf!@!@!@!#!')
-    else:
-        # print('PRODUCT', popular_product.__dict__)
+        return
 
-        # if popular_product.category.channel_links: 
-        #     for channel in popular_product.category.channel_links:
-        #         print('channel22', channel.channel_id)
+    link = popular_product.link
+    short_link = popular_product.product.short_link
+    actual_price = popular_product.actual_price
+    start_price = popular_product.start_price
+    last_notificated_price = popular_product.last_notificated_price
+    name = popular_product.product.name
+    sale = popular_product.sale
+    photo_id = popular_product.product.photo_id
 
-        _id = popular_product.id
-        link = popular_product.link
-        short_link = popular_product.product.short_link
-        actual_price = popular_product.actual_price
-        start_price = popular_product.start_price
-        name = popular_product.product.name
-        sale = popular_product.sale
-        photo_id = popular_product.product.photo_id
+    try:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession() as aiosession:
+            _url = f"{OZON_API_URL}/product/{short_link}"
 
-        try:
-            timeout = aiohttp.ClientTimeout(total=30)
-            async with aiohttp.ClientSession() as aiosession:
-                _url = f"{OZON_API_URL}/product/{short_link}"
+            async with aiosession.get(url=_url,
+                        timeout=timeout) as response:
+                _status_code = response.status
 
-                async with aiosession.get(url=_url,
-                            timeout=timeout) as response:
-                    _status_code = response.status
+                print(_status_code)
 
-                    print(_status_code)
+                res = await response.text()
 
-                    res = await response.text()
-                
-                if _status_code == 404:
-                    raise OzonAPICrashError()
+            if _status_code == 404:
+                raise OzonAPICrashError()
 
-            w = re.findall(r'\"cardPrice.*currency?', res)
+        w = re.findall(r'\"cardPrice.*currency?', res)
 
-            if w:
-                w = w[0].split(',')[:3]
+        if w:
+            w = w[0].split(',')[:3]
 
-                _d = {
-                    'price': None,
-                    'originalPrice': None,
-                    'cardPrice': None,
-                }
+            _d = {
+                'price': None,
+                'originalPrice': None,
+                'cardPrice': None,
+            }
 
-                for k in _d:
-                    if not all(v for v in _d.values()):
-                        for q in w:
-                            if q.find(k) != -1:
-                                _name, price = q.split(':')
-                                price = price.replace('\\', '').replace('"', '')
-                                price = float(''.join(price.split()[:-1]))
-                                # print(price)
-                                _d[k] = price
-                                break
-                    else:
-                        break
+            for k in _d:
+                if not all(v for v in _d.values()):
+                    for q in w:
+                        if q.find(k) != -1:
+                            _name, price = q.split(':')
+                            price = price.replace('\\', '').replace('"', '')
+                            price = float(''.join(price.split()[:-1]))
+                            # print(price)
+                            _d[k] = price
+                            break
+                else:
+                    break
 
-                print(_d)
+            print(_d)
 
-                _product_price = _d.get('cardPrice', 0)
-            else:
-                try:
-                    response_data = res.split('|', maxsplit=1)[-1]
+            _product_price = _d.get('cardPrice', 0)
+        else:
+            try:
+                response_data = res.split('|', maxsplit=1)[-1]
 
-                    json_data: dict = json.loads(response_data)
+                json_data: dict = json.loads(response_data)
 
-                    script_list = json_data.get('seo').get('script')
+                script_list = json_data.get('seo').get('script')
 
-                    inner_html = script_list[0].get('innerHTML') #.get('offers').get('price')
+                inner_html = script_list[0].get('innerHTML') #.get('offers').get('price')
 
-                    inner_html_json: dict = json.loads(inner_html)
-                    offers = inner_html_json.get('offers')
+                inner_html_json: dict = json.loads(inner_html)
+                offers = inner_html_json.get('offers')
 
-                    _price = offers.get('price')
+                _price = offers.get('price')
 
-                    _product_price = _price
-                    
-                    print('Price', _price)
-                except Exception as ex:
-                    print('scheduler parse inner html error', ex)
-                    return
+                _product_price = _price
 
-            _product_price = float(_product_price)
-
-            check_price = _product_price == actual_price
-
-            if check_price:
-                _text = 'цена не изменилась (популярный товар)'
-                print(f'{_text} product {name}')
+                print('Price', _price)
+            except Exception as ex:
+                print('scheduler parse inner html error', ex)
                 return
-            else:
-                _waiting_price = start_price - sale
 
-                update_query = (
-                    update(
-                        PopularProduct
-                    )\
-                    .values(actual_price=_product_price)\
-                    .where(PopularProduct.id == product_id)
-                )
+        _product_price = float(_product_price)
 
-                async for session in get_session():
-                    async with session as _session:
-                        try:
-                            await _session.execute(update_query)
-                            await _session.commit()
-                        except Exception as ex:
-                            await _session.rollback()
-                            print(ex)
+        if _product_price == actual_price:
+            print(f'цена не изменилась (популярный товар) product {name}')
+            return
 
-                pretty_product_price = generate_pretty_amount(_product_price)
-                pretty_actual_price = generate_pretty_amount(actual_price)
-                pretty_sale = generate_pretty_amount(sale)
-                pretty_start_price = generate_pretty_amount(start_price)
+        _waiting_price = start_price - sale
+        update_kwargs = {
+            "actual_price": _product_price
+        }
 
-                if _waiting_price >= _product_price:
-                    
-                    # проверка, отправлялось ли уведомление с такой ценой в прошлый раз
-                    # if last_send_price is not None and (last_send_price == _product_price):
-                    #     print(f'LAST SEND PRICE VALIDATION STOP {last_send_price} | {_product_price}')
-                    #     return
+        if _waiting_price < _product_price:
+            update_kwargs["last_notificated_price"] = None
 
-                    # if actual_price < _product_price:
-                    #     _text = f'популярный🔄 Цена повысилась, но всё ещё входит в выставленный диапазон скидки на товар <a href="{link}">{name}</a>\n\nМаркетплейс: Ozon\n\n🔄Отслеживаемая скидка: {pretty_sale}\n\n⬇️Цена по карте: {pretty_product_price} (дешевле на {start_price - _product_price}₽)\n\nНачальная цена: {pretty_start_price}\n\nПредыдущая цена: {pretty_actual_price}'
-                    #     _disable_notification = True
-                    # else:
-                    
-                    percent = generate_percent_to_popular_product(start_price,
-                                                                  _product_price)
-                    _text = f'🔥 {name} <b>-{percent}%</b> 🔥\n\n📉Было {pretty_start_price} -> <b><u>Стало {pretty_product_price}</u></b>\n\n➡️<a href="{link}">Ссылка на товар</a>'
+        await popular_product_repo.update(product_id, **update_kwargs)
 
-                    if popular_product.category:
-                        category_name = popular_product.category.name
-                        _text += f'\n\n#{category_name.lower()}'
-                    # _text = f'популярный🚨 Изменилась цена на <a href="{link}">{name}</a>\n\nМаркетплейс: Ozon\n\n🔄Отслеживаемая скидка: {pretty_sale}\n\n⬇️Цена по карте: {pretty_product_price} (дешевле на {start_price - _product_price}₽)\n\nНачальная цена: {pretty_start_price}\n\nПредыдущая цена: {pretty_actual_price}'
-                    _disable_notification = False
+        # текущая цена выше, чем скидочный порог
+        if _waiting_price < _product_price:
+            return
+
+        # последняя фиксированная цена не определена
+        if last_notificated_price is None:
+            # фиксируем и оповещаем
+            await popular_product_repo.update(product_id,
+                                              last_notificated_price=_product_price)
+
+            await notify_channels_about_popular_product_sale(
+                popular_product.id,
+                name,
+                link,
+                _product_price,
+                start_price,
+                photo_id,
+                popular_product.category,
+                popular_product.product,
+            )
+            return
+
+        # последняя фиксированная цена ниже текущей цены
+        if last_notificated_price < _product_price:
+            # фиксируем новую цену
+            await popular_product_repo.update(product_id,
+                                              last_notificated_price=_product_price)
+            return
+
+        price_diff = last_notificated_price - _product_price
+        # разница последней фикс цены и текущей цены ниже трех процентов
+        if price_diff / start_price < 0.03:
+            return
+
+        # новая цена больше, чем на 3 процента ниже предыдущей фиксированной цены
+        # фиксируем и оповещаем
+        await popular_product_repo.update(product_id,
+                                          last_notificated_price=_product_price)
+
+        await notify_channels_about_popular_product_sale(
+            popular_product.id,
+            name,
+            link,
+            _product_price,
+            start_price,
+            photo_id,
+            popular_product.category,
+            popular_product.product,
+        )
+
+    except OzonAPICrashError as ex:
+        print('SCHEDULER OZON API CRUSH', ex)
+
+    except Exception as ex:
+        print('OZON SCHEDULER ERROR', ex, ex.args)
 
 
-                    channel_links = [channel.channel_id for channel in popular_product.category.channel_links]
+async def notify_channels_about_popular_product_sale(popular_product_id: int,
+                                                     name: str,
+                                                     link: str,
+                                                     product_price: int,
+                                                     start_price: int,
+                                                     photo_id: str,
+                                                     category: Category | None,
+                                                     product: Product):
+    pretty_product_price = generate_pretty_amount(product_price)
+    pretty_start_price = generate_pretty_amount(start_price)
+    percent = generate_percent_to_popular_product(start_price, product_price)
+    _text = f'🔥 {name} <b>-{percent}%</b> 🔥\n\n📉Было {pretty_start_price} -> <b><u>Стало {pretty_product_price}</u></b>\n\n➡️<a href="{link}">Ссылка на товар</a>'
 
-                    print(channel_links)
+    if category:
+        category_name = category.name
+        _text += f'\n\n#{category_name.lower()}'
 
-                    _kb = create_remove_popular_kb(marker=popular_product.product.product_marker,
-                                                   popular_product_id=popular_product.id)
-                    # _kb = new_create_remove_and_edit_sale_kb(user_id=user_id,
-                    #                                          product_id=product_id,
-                    #                                          marker='ozon',
-                    #                                          job_id=job_id,
-                    #                                          with_redirect=False)
-                    
-                    # _kb = add_graphic_btn(_kb,
-                    #                       user_id=user_id,
-                    #                       product_id=_id)
+    _disable_notification = False
 
-                    # _kb = add_or_create_close_kb(_kb)
+    channel_links = [channel.channel_id for channel in category.channel_links]
 
-                    for channel_link in channel_links:
-                        msg = await bot.send_photo(chat_id=channel_link,
-                                                photo=photo_id,
-                                                caption=_text,
-                                                disable_notification=_disable_notification,
-                                                reply_markup=_kb.as_markup())
-                        
-                        await asyncio.sleep(0.2)
-                        
-                    return
+    print(channel_links)
 
-        except OzonAPICrashError as ex:
-            print('SCHEDULER OZON API CRUSH', ex)
+    _kb = create_remove_popular_kb(marker=product.product_marker,
+                                    popular_product_id=popular_product_id)
 
-        except Exception as ex:
-            print('OZON SCHEDULER ERROR', ex, ex.args)
+    for channel_link in channel_links:
+        _ = await bot.send_photo(chat_id=channel_link,
+                                photo=photo_id,
+                                caption=_text,
+                                disable_notification=_disable_notification,
+                                reply_markup=_kb.as_markup())
+
+        await asyncio.sleep(0.2)
 
 
 
