@@ -24,7 +24,7 @@ class ImageManager:
         if not os.path.exists(path):
             return None
 
-        photo_id = await self._generate_photo_id(path)
+        photo_id = await self.generate_photo_id_for_file(path)
         self.config.start_pic = photo_id
         self.save()
         return photo_id
@@ -37,7 +37,7 @@ class ImageManager:
         if not os.path.exists(path):
             return None
 
-        photo_id = await self._generate_photo_id(path)
+        photo_id = await self.generate_photo_id_for_file(path)
         self.config.default_product_photo = photo_id
         self.save()
         return photo_id
@@ -50,7 +50,7 @@ class ImageManager:
         if not os.path.exists(path):
             return None
 
-        photo_id = await self._generate_photo_id(path)
+        photo_id = await self.generate_photo_id_for_file(path)
         self.config.default_product_list_photo = photo_id
         self.save()
         return photo_id
@@ -63,14 +63,14 @@ class ImageManager:
         photo_ids = []
         paths = self._get_question_images(question.value)
         for path in paths:
-            photo_id = await self._generate_photo_id(path)
+            photo_id = await self.generate_photo_id_for_file(path)
             photo_ids.append(photo_id)
 
         self.config.faq_pic_dict.set(question, photo_ids)
         self.save()
         return photo_ids
 
-    async def generate_photo_id(self, url: str) -> str:
+    async def generate_photo_id_for_url(self, url: str) -> str:
         msg = await self.bot.send_photo(
             chat_id=config.DUMP_CHAT, photo=types.URLInputFile(url=url)
         )
@@ -78,7 +78,7 @@ class ImageManager:
 
         return file_id
 
-    async def _generate_photo_id(self, path: str) -> str:
+    async def generate_photo_id_for_file(self, path: str) -> str:
         photo = types.FSInputFile(path)
         msg = await self.bot.send_photo(chat_id=config.DUMP_CHAT, photo=photo)
         file_id = msg.photo[-1].file_id

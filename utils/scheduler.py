@@ -10,9 +10,8 @@ from math import ceil
 from datetime import datetime, timedelta
 from typing import Literal
 
-from aiogram import types, Bot
+from aiogram import types
 
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -22,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import insert, select, and_, text, update, func, desc
 
+import config
 from db.base import (
     Category,
     ChannelLink,
@@ -44,16 +44,17 @@ from db.base import (
 
 from background.base import get_redis_background_pool, _redis_pool, get_redis_pool
 
+from db.repository.product import ProductRepository
 from keyboards import (
-    add_graphic_btn,
     add_or_create_close_kb,
     create_remove_and_edit_sale_kb,
-    create_remove_kb,
     new_create_remove_and_edit_sale_kb,
 )
 
 from bot22 import bot
 
+from services.ozon_api_service import OzonAPIService
+from services.wb_api_service import WbAPIService
 from utils.pics import ImageManager
 from utils.storage import redis_client
 from utils.any import (
@@ -73,10 +74,7 @@ from utils.exc import (
 
 from config import (
     DEV_ID,
-    DUMP_CHAT,
     SUB_DEV_ID,
-    WB_API_URL,
-    OZON_API_URL,
     JOB_STORE_URL,
 )
 
@@ -175,6 +173,55 @@ async def periodic_delete_old_message(user_id: int):
     # print('USER DATA', json_user_data)
 
     dict_msg_on_delete: dict = json_user_data.get("dict_msg_on_delete")
+    if not dict_msg_on_delete:
+        return
+
+    for _key in list(dict_msg_on_delete.keys()):
+        chat_id, message_date = dict_msg_on_delete.get(_key)
+        date_now = datetime.now()
+        # тестовый вариант, удаляем сообщения старше 1 часа
+        print(
+            (
+                datetime.fromtimestamp(date_now.timestamp())
+                - datetime.fromtimestamp(message_date)
+            )
+            > timedelta(hours=36)
+        )
+        if (
+            datetime.fromtimestamp(date_now.timestamp())
+            - datetime.fromtimestamp(message_date)
+        ) > timedelta(hours=36):
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=_key)
+                await asyncio.sleep(0.1)
+                # await bot.delete_messages() # что будет если какое то сообщение не сможет удалиться и произойдет ошибка ???
+            except Exception as ex:
+                del dict_msg_on_delete[_key]
+                print(ex)
+            else:
+                del dict_msg_on_delete[_key]
+
+
+async def test_periodic_delete_old_message(user_id: int):
+    print(f"TEST SCHEDULER TASK DELETE OLD MESSAGE USER {user_id}")
+    key = f"fsm:{user_id}:{user_id}:data"
+
+    async with redis_client.pipeline(transaction=True) as pipe:
+        user_data: bytes = await pipe.get(key)
+        results = await pipe.execute()
+        # Извлекаем результат из выполненного pipeline
+    # print('RESULTS', results)
+    # print('USER DATA (BYTES)', user_data)
+
+    if not results[0]:
+        return
+
+    json_user_data: dict = json.loads(results[0])
+    # print('USER DATA', json_user_data)
+
+    dict_msg_on_delete: dict = json_user_data.get("dict_msg_on_delete")
+
+    message_id_on_delete_list = []
 
     if dict_msg_on_delete:
         for _key in list(dict_msg_on_delete.keys()):
@@ -192,86 +239,35 @@ async def periodic_delete_old_message(user_id: int):
                 datetime.fromtimestamp(date_now.timestamp())
                 - datetime.fromtimestamp(message_date)
             ) > timedelta(hours=36):
-                try:
-                    await bot.delete_message(chat_id=chat_id, message_id=_key)
-                    await asyncio.sleep(0.1)
-                    # await bot.delete_messages() # что будет если какое то сообщение не сможет удалиться и произойдет ошибка ???
-                except Exception as ex:
-                    del dict_msg_on_delete[_key]
-                    print(ex)
-                else:
-                    del dict_msg_on_delete[_key]
+                message_id_on_delete_list.append(_key)
+                # try:
+                #     await bot.delete_message(chat_id=chat_id,
+                #                             message_id=_key)
+                #     await asyncio.sleep(0.1)
+                #     # await bot.delete_messages() # что будет если какое то сообщение не сможет удалиться и произойдет ошибка ???
+                # except Exception as ex:
+                #     del dict_msg_on_delete[_key]
+                #     print(ex)
+                # else:
+                del dict_msg_on_delete[_key]
 
-    pass
-
-
-async def test_periodic_delete_old_message(user_id: int):
-    print(f"TEST SCHEDULER TASK DELETE OLD MESSAGE USER {user_id}")
-    key = f"fsm:{user_id}:{user_id}:data"
+    # ?
+    # json_user_data['dict_msg_on_delete'] = dict_msg_on_delete
 
     async with redis_client.pipeline(transaction=True) as pipe:
-        user_data: bytes = await pipe.get(key)
+        bytes_data = json.dumps(json_user_data)
+        await pipe.set(key, bytes_data)
         results = await pipe.execute()
-        # Извлекаем результат из выполненного pipeline
-    # print('RESULTS', results)
-    # print('USER DATA (BYTES)', user_data)
 
-    if results[0] is not None:
-        json_user_data: dict = json.loads(results[0])
-        # print('USER DATA', json_user_data)
+    if message_id_on_delete_list:
+        iterator_count = ceil(len(message_id_on_delete_list) / 100)
 
-        dict_msg_on_delete: dict = json_user_data.get("dict_msg_on_delete")
+        for i in range(iterator_count):
+            idx = i * 100
+            _messages_on_delete = message_id_on_delete_list[idx : idx + 100]
 
-        message_id_on_delete_list = []
-
-        if dict_msg_on_delete:
-            for _key in list(dict_msg_on_delete.keys()):
-                chat_id, message_date = dict_msg_on_delete.get(_key)
-                date_now = datetime.now()
-                # тестовый вариант, удаляем сообщения старше 1 часа
-                print(
-                    (
-                        datetime.fromtimestamp(date_now.timestamp())
-                        - datetime.fromtimestamp(message_date)
-                    )
-                    > timedelta(hours=36)
-                )
-                if (
-                    datetime.fromtimestamp(date_now.timestamp())
-                    - datetime.fromtimestamp(message_date)
-                ) > timedelta(hours=36):
-                    message_id_on_delete_list.append(_key)
-                    # try:
-                    #     await bot.delete_message(chat_id=chat_id,
-                    #                             message_id=_key)
-                    #     await asyncio.sleep(0.1)
-                    #     # await bot.delete_messages() # что будет если какое то сообщение не сможет удалиться и произойдет ошибка ???
-                    # except Exception as ex:
-                    #     del dict_msg_on_delete[_key]
-                    #     print(ex)
-                    # else:
-                    del dict_msg_on_delete[_key]
-
-        # ?
-        # json_user_data['dict_msg_on_delete'] = dict_msg_on_delete
-
-        async with redis_client.pipeline(transaction=True) as pipe:
-            bytes_data = json.dumps(json_user_data)
-            await pipe.set(key, bytes_data)
-            results = await pipe.execute()
-
-        if message_id_on_delete_list:
-            iterator_count = ceil(len(message_id_on_delete_list) / 100)
-
-            for i in range(iterator_count):
-                idx = i * 100
-                _messages_on_delete = message_id_on_delete_list[idx : idx + 100]
-
-                await bot.delete_messages(
-                    chat_id=chat_id, message_ids=_messages_on_delete
-                )
-                await asyncio.sleep(0.2)
-        pass
+            await bot.delete_messages(chat_id=chat_id, message_ids=_messages_on_delete)
+            await asyncio.sleep(0.2)
 
 
 async def check_product_by_user_in_db(
@@ -830,76 +826,8 @@ async def save_product(
         if _wb_punkt:
             wb_punkt_id, del_zone = _wb_punkt[0]
         else:
-            wb_punkt_id, del_zone = (None, -1281648)
+            wb_punkt_id, del_zone = (None, config.WB_DEFAULT_DELIVERY_ZONE)
 
-        # if not del_zone:
-        #     # lat, lon = ('55.707106', '37.572854')
-        #     del_zone = -1281648
-
-        # async with aiohttp.ClientSession() as aiosession:
-        #     # _url = f"http://172.18.0.7:8080/pickUpPoint/{lat}/{lon}"
-        #     # response = await aiosession.get(url=_url)
-
-        #     # res = await response.json()
-
-        #     # deliveryRegions = res.get('deliveryRegions')
-
-        #     # print(deliveryRegions)
-
-        #     # del_zone = deliveryRegions[-1]
-
-        #     _data = {
-        #         'lat': float(lat),
-        #         'lon': float(lon),
-        #         'zone': del_zone,
-        #         'user_id': msg[0],
-        #         'time_create': datetime.now(tz=pytz.timezone('Europe/Moscow')),
-        #     }
-
-        #     query = (
-        #         insert(WbPunkt)\
-        #         .values(**_data)
-        #     )
-        #     async with session as session:
-        #         await session.execute(query)
-
-        #         try:
-        #             await session.commit()
-        #             _text = 'Wb пукнт успешно добавлен'
-        #         except Exception:
-        #             await session.rollback()
-        #             _text = 'Wb пукнт не удалось добавить'
-
-        #             await bot.send_message(chat_id=msg[0],
-        #                                 text='Не получилось найти пункт выдачи')
-        #             return True
-
-        # query = (
-        #     select(
-        #         WbProduct.id
-        #     )\
-        #     .join(User,
-        #         WbProduct.user_id == User.tg_id)\
-        #     .where(
-        #         and_(
-        #             User.tg_id == msg[0],
-        #             WbProduct.link == link,
-        #         )
-        #     )
-        # )
-        # async with session as session:
-        #     res = await session.execute(query)
-
-        #     check_product_by_user = res.scalar_one_or_none()
-
-        # if check_product_by_user:
-        # _kb = create_or_add_cancel_btn()
-        # await bot.edit_message_text(chat_id=msg[0],
-        #                             message_id=msg[-1],
-        #                             text='Продукт уже добален',
-        #                             reply_markup=_kb.as_markup())
-        # await message.delete()
-        # return
         check_product_by_user = await check_product_by_user_in_db(
             user_id=msg[0], short_link=short_link, marker="wb", session=session
         )
@@ -1055,21 +983,6 @@ async def save_product(
 
                 if client_id:
                     await send_data_to_yandex_metica(client_id, goal_id="add_product")
-                # else:
-            #     _text = 'Что то пошло не так'
-            #     print(_text)
-            #     return True
-
-            # await state.update_data(wb_product_link=wb_product_link,
-            #                         wb_product_id=wb_product_id,
-            #                         wb_start_price=float(_product_price),
-            #                         wb_product_price=float(_product_price),
-            #                         wb_product_name=_product_name)
-
-        pass
-    else:
-        # error
-        pass
 
 
 async def add_product_to_db_popular_product(
@@ -1156,26 +1069,6 @@ async def add_product_to_db_popular_product(
 
             await _session.commit()
 
-    # async with session as _session:
-    #     res = await _session.execute(check_product_query)
-
-    # _product = res.scalar_one_or_none()
-
-    # if not _product:
-    #     insert_data = {
-    #         'product_marker': marker,
-    #         'name': name,
-    #         'short_link': short_link,
-    #         'photo_id': photo_id,
-    #     }
-
-    #     _product = Product(**insert_data)
-    #     _session.add(_product)
-
-    #     await session.flush(_product)
-
-    # product_id = _product.id
-
     popular_product_data = {
         "link": data.get("link"),
         "product_id": product_id,
@@ -1194,8 +1087,6 @@ async def add_product_to_db_popular_product(
         _session.add(popular_product)
         await _session.flush()
 
-        # async with session as _session:
-        # try:
         await _session.commit()
         print("added!!!!!")
 
@@ -1214,12 +1105,6 @@ async def add_product_to_db_popular_product(
             jobstore="sqlalchemy",
         )
         print("jobbb", job)
-        # except Exception as ex:
-        #     print('here')
-        #     print(ex)
-        #     await session.rollback()
-        # else:
-        #     pass
 
 
 async def add_product_to_db(
@@ -1376,23 +1261,9 @@ async def try_update_ozon_product_photo(
 ):
     photo_id = None
     try:
-        timeout = aiohttp.ClientTimeout(total=35)
-        async with aiohttp.ClientSession() as aiosession:
-            # _url = f"http://5.61.53.235:1441/product/{message.text}"
-            # if not del_zone:
-            # _url = f"http://5.61.53.235:1441/product/{short_link}"
-            _url = f"{OZON_API_URL}/product/{short_link}"
-            # else:
-            #     _url = f"http://5.61.53.235:1441/product/{del_zone}/{ozon_short_link}"
-            # _url = f"{OZON_API_URL}/product/{del_zone}/{ozon_short_link}"
+        api_service = OzonAPIService()
+        text_data = await api_service.get_product_data(short_link)
 
-            async with aiosession.get(url=_url, timeout=timeout) as response:
-                _status_code = response.status
-                print(f"OZON RESPONSE CODE {_status_code}")
-
-                text_data = await response.text()
-
-        # photo_url_pattern = r'images\\":\[{\\"src\\":\\"https:\/\/cdn1\.ozone\.ru\/s3\/multimedia-[a-z0-9]*(-\w*)?\/\d+\.jpg'
         photo_url_pattern = r'images\\":\[{\\"src\\":\\"https:\/\/cdn1\.ozone\.ru\/s3\/multimedia-[a-z0-9]*(-\w*)?(\/*[a-z0-9]*\/*)?\/\d+\.jpg'
 
         match = re.search(photo_url_pattern, text_data)
@@ -1402,47 +1273,25 @@ async def try_update_ozon_product_photo(
             photo_url_match = re.search(r"https.*\.jpg?", match.group())
             if photo_url_match:
                 photo_url = photo_url_match.group()
-                # print('RESULT URL',photo_url)
 
-                api_check_id_channel = DUMP_CHAT
-
-                photo_msg = await bot.send_photo(
-                    chat_id=api_check_id_channel,
-                    photo=types.URLInputFile(url=photo_url),
-                )
-                _photo = photo_msg.photo
-
-                if _photo:
-                    photo_id = _photo[0].file_id
+                photo_id = await image_manager.generate_photo_id_for_url(photo_url)
     except Exception as ex:
         print(ex)
     finally:
         if not photo_id:
             photo_id = await image_manager.get_default_product_photo_id()
 
-    update_query = (
-        update(Product).values(photo_id=photo_id).where(Product.id == product_id)
-    )
-
-    await session.execute(update_query)
+    repo = ProductRepository(session)
+    repo.update(product_id, photo_id=photo_id)
 
 
 async def try_get_ozon_product_photo(
     short_link: str, text_data: str, session: AsyncSession
 ):
-    check_query = select(
-        Product.photo_id,
-    ).where(
-        Product.short_link == short_link,
-    )
-
-    async with session as _session:
-        res = await _session.execute(check_query)
-
-    product_photo = res.scalar_one_or_none()
-
-    if product_photo:
-        return product_photo
+    repo = ProductRepository(session)
+    product = await repo.find_by_short_link(short_link)
+    if product:
+        return product.photo_id
 
     # photo_url_pattern = r'image\\":\\"https:\/\/cdn1\.ozone\.ru\/s3\/multimedia-\d+(-\w+)?\/\d+\.jpg'
 
@@ -1456,21 +1305,7 @@ async def try_get_ozon_product_photo(
         if photo_url_match:
             photo_url = photo_url_match.group()
             # print('RESULT URL',photo_url)
-            return await image_manager.generate_photo_id(url=photo_url)
-            # api_check_id_channel = DUMP_CHAT
-
-            # photo_msg = await bot.send_photo(chat_id=api_check_id_channel,
-            #                                  photo=types.URLInputFile(url=photo_url))
-            # _photo = photo_msg.photo
-
-            # if _photo:
-            #     photo_id = _photo[0].file_id
-
-            #     return photo_id
-            # print('PHOTO ID',photo_id)
-
-            # await bot.delete_message(chat_id=user_id,
-            #                          message_id=photo_msg.message_id)
+            return await image_manager.generate_photo_id_for_url(url=photo_url)
     else:
         print("URL не найден")
     return image_manager.config.start_pic
@@ -1492,18 +1327,8 @@ async def save_popular_ozon_product(
         _idx = link.rfind("product/")
         ozon_short_link = link[(_idx + len(_prefix)) :]
 
-    timeout = aiohttp.ClientTimeout(total=35)
-    async with aiohttp.ClientSession() as aiosession:
-        _url = f"{OZON_API_URL}/product/{ozon_short_link}"
-
-        async with aiosession.get(url=_url, timeout=timeout) as response:
-            _status_code = response.status
-            print(f"OZON RESPONSE CODE {_status_code}")
-
-            res = await response.text()
-
-    if _status_code == 404 or res == "408 Request Timeout":
-        raise OzonAPICrashError()
+    api_service = OzonAPIService()
+    res = await api_service.get_product_data(ozon_short_link)
 
     _new_short_link = res.split("|")[0]
     print(_new_short_link)
@@ -1598,14 +1423,10 @@ async def save_popular_wb_product(
 
     short_link = link[_idx_prefix + len(_prefix) :].split("/")[0]
 
-    del_zone = -1281648
-
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession() as aiosession:
-        _url = f"{WB_API_URL}/product/{del_zone}/{short_link}"
-        async with aiosession.get(url=_url, timeout=timeout) as response:
-
-            res = await response.json()
+    api_service = WbAPIService()
+    res = await api_service.get_product_data(
+        short_link, config.WB_DEFAULT_DELIVERY_ZONE
+    )
 
     photo_id = await try_get_wb_product_photo(short_link=short_link, session=session)
 
@@ -1696,22 +1517,8 @@ async def save_ozon_product(
 
     print("do request on OZON API (new version)")
 
-    # try:
-    timeout = aiohttp.ClientTimeout(total=35)
-    async with aiohttp.ClientSession() as aiosession:
-        if not del_zone:
-            _url = f"{OZON_API_URL}/product/{ozon_short_link}"
-        else:
-            _url = f"{OZON_API_URL}/product/{del_zone}/{ozon_short_link}"
-
-        async with aiosession.get(url=_url, timeout=timeout) as response:
-            _status_code = response.status
-            print(f"OZON RESPONSE CODE {_status_code}")
-
-            res = await response.text()
-
-    if _status_code == 404 or res == "408 Request Timeout":
-        raise OzonAPICrashError()
+    api_service = OzonAPIService()
+    res = await api_service.get_product_data(ozon_short_link, del_zone)
 
     _new_short_link = res.split("|")[0]
     print(_new_short_link)
@@ -1806,85 +1613,42 @@ async def save_ozon_product(
 async def try_update_wb_product_photo(
     product_id: int, short_link: str, session: AsyncSession
 ):
-    api_check_id_channel = DUMP_CHAT
-
-    _url = f"{WB_API_URL}/product/image/{short_link}"
-    # _url = f"http://5.61.53.235:1435/product/image/{short_link}"
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession() as aiosession:
-        async with aiosession.get(url=_url, timeout=timeout) as response:
-            _status_code = response.status
-
-            res = await response.text()
-    photo_id = None
     try:
-        image_data = base64.b64decode(res)
+        api_service = WbAPIService()
+        image_data = await api_service.get_product_image(short_link)
 
         image_name = "test_image.png"
 
         async with aiofiles.open(image_name, "wb") as file:
             await file.write(image_data)
 
-        photo_msg = await bot.send_photo(
-            chat_id=api_check_id_channel,
-            photo=types.FSInputFile(path=f"./{image_name}"),
-        )
+        photo_id = await image_manager.generate_photo_id_for_file(f"./{image_name}")
 
-        if photo_msg.photo:
-            photo_id = photo_msg.photo[0].file_id
-    except Exception as ex:
-        print(ex)
-    finally:
         if not photo_id:
             photo_id = await image_manager.get_default_product_photo_id()
 
-    update_query = (
-        update(Product).values(photo_id=photo_id).where(Product.id == product_id)
-    )
-
-    await session.execute(update_query)
+        repo = ProductRepository(session)
+        await repo.update(product_id, photo_id=photo_id)
+    except Exception as e:
+        print(e)
 
 
 async def try_get_wb_product_photo(short_link: str, session: AsyncSession):
-    check_query = select(
-        Product.photo_id,
-    ).where(
-        Product.short_link == short_link,
-    )
-
     async with session as _session:
-        res = await _session.execute(check_query)
+        repo = ProductRepository(session)
+        product = await repo.find_by_short_link(short_link)
+        if product:
+            return product.photo_id
 
-    product_photo = res.scalar_one_or_none()
-
-    if product_photo:
-        return product_photo
-
-    api_check_id_channel = DUMP_CHAT
-
-    _url = f"{WB_API_URL}/product/image/{short_link}"
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession() as aiosession:
-        async with aiosession.get(url=_url, timeout=timeout) as response:
-            _status_code = response.status
-
-            res = await response.text()
-
-    image_data = base64.b64decode(res)
+    api_service = WbAPIService()
+    image_data = await api_service.get_product_image(short_link)
 
     image_name = "test_image.png"
 
     async with aiofiles.open(image_name, "wb") as file:
         await file.write(image_data)
 
-    photo_msg = await bot.send_photo(
-        chat_id=api_check_id_channel, photo=types.FSInputFile(path=f"./{image_name}")
-    )
-
-    if photo_msg.photo:
-        photo_id = photo_msg.photo[0].file_id
-
-        return photo_id
+    return await image_manager.generate_photo_id_for_file(f"./{image_name}")
 
 
 async def save_wb_product(
@@ -1928,7 +1692,7 @@ async def save_wb_product(
     del_zone = res.scalar_one_or_none()
 
     if not del_zone:
-        del_zone = -1281648
+        del_zone = config.WB_DEFAULT_DELIVERY_ZONE
 
     check_product_by_user = await new_check_product_by_user_in_db(
         user_id=user_id, short_link=short_link, session=session
@@ -1937,19 +1701,13 @@ async def save_wb_product(
     if check_product_by_user:
         raise WbProductExistsError()
 
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession() as aiosession:
-        _url = f"{WB_API_URL}/product/{del_zone}/{short_link}"
-        async with aiosession.get(url=_url, timeout=timeout) as response:
-
-            res = await response.json()
+    api_service = WbAPIService()
+    res = await api_service.get_product_data(short_link, del_zone)
 
     photo_id = await try_get_wb_product_photo(short_link=short_link, session=session)
 
     if not photo_id:
         photo_id = await image_manager.get_default_product_photo_id()
-        # print('Не удалось спарсить фото WB товара')
-        # raise Exception()
 
     d = res.get("data")
 
@@ -2456,331 +2214,6 @@ async def background_task_wrapper(func_name, *args, _queue_name):
     )
 
 
-async def test_jobs(scheduler: AsyncIOScheduler):
-    jobs: list[Job] = scheduler.get_jobs(jobstore="sqlalchemy")
-
-    for job in jobs:
-        print("job", job.id, job.func, job.kwargs)
-        print("*" * 10)
-
-
-async def startup_update_scheduler_jobs(scheduler: AsyncIOScheduler):
-    jobs: list[Job] = scheduler.get_jobs(jobstore="sqlalchemy")
-    # _redis = await get_redis_background_pool()
-    #
-    # _user_id = 686339126
-    # job_id = f'delete_msg_task_{_user_id}'
-    # scheduler.add_job(func=background_task_wrapper,
-    #                   trigger=scheduler_cron,
-    #                   jobstore='sqlalchemy',
-    #                   id=job_id,
-    #                   coalesce=True,
-    #                   args=(f'periodic_delete_old_message', _user_id, ),
-    #                   kwargs={'_queue_name': 'arq:low'})
-
-    print("start up update scheduler jobs...")
-    _timedelta = timedelta(minutes=1)
-    run_time = datetime.now()
-    for job in jobs:
-        # print(job)
-        # print(job.func)
-        # # print(job.__dir__())
-        # print(job.args)
-        # print(job.kwargs)
-        # print(job.kwargs)
-        if job.id.find("popular") == -1:
-            if job.id.find("wb") != -1 or job.id.find("ozon") != -1:
-                # print(job, job.kwargs)
-                # print(job.func)
-                # print(job.__dir__())
-                # print(job.args)
-                # print(job.kwargs)
-                pass
-
-            elif job.id.find("delete_msg_task") != -1:
-                user_id = job.id.split("_")[-1]
-                # print(job.__dir__())
-                # print(job.func)
-                # print(job.args)
-                # print(job.kwargs)
-
-                # _args = job.args
-
-                # if not _args:
-                #     __args = ('periodic_delete_old_message', int(user_id), )
-                #     _kwargs = {'_queue_name': 'arq:low'}
-
-                #     job.modify(func=background_task_wrapper,
-                #                 args=__args,
-                #                 kwargs=_kwargs,
-                #                 trigger=scheduler_interval)
-                #     print(f'{job.id} modify!!!!')
-
-                # if job.id.find('wb') != -1:
-                #     _args = job.args
-
-                #     # _user_id = job.kwargs['user_id']
-                #     # _product_id = ['product_id']
-
-                #     if not _args:
-                #         __args = job.kwargs.values()
-                #         _args = ('new_push_check_wb_price', *__args, )
-                #         _kwargs = {'_queue_name': 'arq:low'}
-                # _run_time = run_time + _timedelta
-
-                # job.modify(func=background_task_wrapper,
-                #         args=job.args,
-                #         kwargs=job.kwargs,
-                #         next_run_time=_run_time)
-
-                # _timedelta += timedelta(minutes=1)
-
-                # _kwargs = job.kwargs
-
-                # _queue_name = _kwargs.get('_queue_name')
-
-                # if _queue_name:
-                #     print(job.id)
-                #     user_id, marker, product_id = job.id.split(':')
-
-                #     modify_func = new_push_check_wb_price
-                #     # else:
-                #     #     modify_func = push_check_wb_price
-                #     job.modify(func=modify_func,
-                #                 trigger=scheduler_cron,
-                #                 kwargs={'user_id': user_id,
-                #                         'proudct_id': product_id})
-                #     continue
-
-                # if job.id.find(DEV_ID) != -1:
-                #     modify_func = background_task_wrapper
-                #     _args = job.args
-                #     _kwargs = job.kwargs
-
-                #     job.modify(func=modify_func,
-                #                args=_args,
-                #                kwargs=_kwargs)
-                #     continue
-                #     user_id = job.kwargs.get('user_id')
-                #     product_id = job.kwargs.get('product_id')
-
-                #     _args = (user_id, product_id,)
-
-                #     _kwargs = {
-                #         '_queue_name': 'arq:low',
-                #         'func_name': 'new_push_check_wb_price',
-
-                #     }
-
-                # #     # async def job_wrapper(user_id: int,
-                # #     #                       product_id: int):
-                # #     #     await _redis.enqueue_job("new_push_check_wb_price", user_id, product_id, _queue_name="arq:low")
-
-                #     # modify_func = background_task_wrapper
-                #     job.remove()
-
-                #     job_id = f'{user_id}:wb:{product_id}'
-
-                #     scheduler.add_job(func=background_task_wrapper,
-                #                trigger=scheduler_cron,
-                #                next_run_time=datetime.now(),
-                #                id=job_id,
-                #                coalesce=True,
-                #                jobstore='sqlalchemy',
-                #             #    args=(f'new_push_check_wb_price', user_id, product_id, ),
-                #                args=_args,
-                #                kwargs=_kwargs)
-                #     continue
-                # else:
-                # modify_func = new_push_check_wb_price
-                # else:
-                #     modify_func = push_check_wb_price
-                # job.modify(func=modify_func,
-                #             trigger=scheduler_cron)
-
-                # else:
-                #     _args = job.args
-
-                #     # _user_id = job.kwargs['user_id']
-                #     # _product_id = job.kwargs['product_id']
-
-                #     if not _args:
-                #         __args = job.kwargs.values()
-                #         _args = ('new_push_check_ozon_price', *__args, )
-                #         _kwargs = {'_queue_name': 'arq:low'}
-
-                #         job.modify(func=background_task_wrapper,
-                #                 args=_args,
-                #                 kwargs=_kwargs)
-
-                # if job.id.find(DEV_ID) != -1:
-                #     modify_func = background_task_wrapper
-                #     _args = job.args
-                #     _kwargs = job.kwargs
-
-                #     job.modify(func=modify_func,
-                #                args=_args,
-                #                kwargs=_kwargs)
-                #     continue
-
-                # _kwargs = job.kwargs
-
-                # _queue_name = _kwargs.get('_queue_name')
-
-                # if _queue_name:
-                #     print(job.id)
-                #     user_id, marker, product_id = job.id.split(':')
-
-                #     modify_func = new_push_check_ozon_price
-                #     # else:
-                #     #     modify_func = push_check_wb_price
-                #     job.modify(func=modify_func,
-                #                 trigger=scheduler_cron,
-                #                 kwargs={'user_id': user_id,
-                #                         'proudct_id': product_id})
-                # continue
-
-                # if job.id.find(DEV_ID) != -1:
-                #     user_id = job.kwargs.get('user_id')
-                #     product_id = job.kwargs.get('product_id')
-
-                #     _args = (user_id, product_id, )
-
-                #     _kwargs = {
-                #         # 'func_name': 'new_push_check_ozon_price',
-                #         # 'user_id': user_id,
-                #         # 'product_id': product_id,
-                #         '_queue_name': 'arq:low',
-                #         'func_name': 'new_push_check_ozon_price',
-                #     }
-
-                #     job.remove()
-
-                #     job_id = f'{user_id}:ozon:{product_id}'
-
-                #     scheduler.add_job(func=background_task_wrapper,
-                #                trigger=scheduler_cron,
-                #                next_run_time=datetime.now(),
-                #                id=job_id,
-                #                coalesce=True,
-                #                jobstore='sqlalchemy',
-                #             #    args=(f'new_push_check_wb_price', user_id, product_id, ),
-                #                args=_args,
-                #                kwargs=_kwargs)
-                #     continue
-                #     # async def job_wrapper(user_id: int,
-                #     #                       product_id: int):
-                #     #     await _redis.enqueue_job("new_push_check_ozon_price", user_id, product_id, _queue_name="arq:low")
-
-                #     modify_func = new_push_ozon_job_wrapper
-                #     job.modify(func=modify_func,
-                #             trigger=scheduler_cron,
-                #             next_run_time=datetime.now(),
-                #             kwargs={'user_id': user_id,
-                #                     'product_id': product_id})
-                # job.modify(func=background_task_wrapper,
-                #            trigger=scheduler_cron,
-                #            next_run_time=datetime.now(),
-                #            args=_args,
-                #         #    args=(f'new_push_check_ozon_price', user_id, product_id, ),
-                #            kwargs=_kwargs)
-                # else:
-                # modify_func = new_push_check_ozon_price
-                # else:
-                # _kwargs = job.kwargs
-                # _args = job.args
-
-                # if job.id == '686339126:ozon:108':
-                #     user_id = 686339126
-                #     product_id = 108
-
-                #     job.modify(func=modify_func,
-                #            trigger=scheduler_cron,
-                #            _args=(),
-                #            kwargs={'user_id': user_id,
-                #    'product_id': product_id})
-                # continue
-
-                # print(job.id)
-                # print(_args, _kwargs)
-                #     modify_func = push_check_ozon_price
-        #         job.modify(func=modify_func,
-        #                    trigger=scheduler_cron)
-        elif job.id.find("popular") != -1:
-            job.modify(kwargs={"_queue_name": "arq:popular"})
-            pass
-            # print(job, job.kwargs)
-
-        # elif job.id.find('delete_msg_task') != -1:
-        #     user_id = job.id.split('_')[-1]
-        #     # print(job.__dir__())
-        #     print(job.func)
-        #     print(job.args)
-        #     print(job.kwargs)
-
-        # if job.id.find(DEV_ID) != -1:
-        # #     modify_func = background_task_wrapper
-        # _args = job.args
-        # # #     _kwargs = job.kwargs
-        # if not _args:
-        #     __args = ('periodic_delete_old_message', int(user_id), )
-        #     _kwargs = {'_queue_name': 'arq:low'}
-
-        #     job.modify(func=background_task_wrapper,
-        #                 args=__args,
-        #                 kwargs=_kwargs,
-        #                 interval=scheduler_interval)
-        # else:
-        #     job.modify(func=background_task_wrapper,
-        #                 args=job.args,
-        #                 kwargs=job.kwargs,
-        #                 interval=scheduler_interval)
-        # else:
-        #     _args = ('periodic_delete_old_message', int(user_id), )
-        #     _kwargs = {'_queue_name': 'arq:low'}
-
-        #     job.modify(func=background_task_wrapper,
-        #                 args=_args,
-        #                 kwargs=_kwargs)
-
-        # print('job modified')
-        #     continue
-
-        # if job.id.find(DEV_ID) != -1:
-
-        #         job.remove()
-
-        #         job_id = f'{user_id}:wb:{product_id}'
-
-        #         _args = (user_id, )
-        #         _kwargs = {'func_name': 'periodic_delete_old_message',
-        #                    '_queue_name': 'arq:low'}
-
-        #         scheduler.add_job(func=background_task_wrapper,
-        #                    trigger=scheduler_interval,
-        #                    next_run_time=datetime.now(),
-        #                    id=job_id,
-        #                    coalesce=True,
-        #                    jobstore='sqlalchemy',
-        #                 #    args=(f'new_push_check_wb_price', user_id, product_id, ),
-        #                    args=_args,
-        #                    kwargs=_kwargs)
-        #         continue
-
-        # job.modify(func=background_task_wrapper,
-        #            trigger=scheduler_cron,
-        #            next_run_time=datetime.now(),
-        #            args=(user_id, ),
-        #            kwargs={'_queue_name': 'arq:low',
-        #                    'func_name': 'periodic_delete_old_message'})
-        # continue
-        # else:
-        # modify_func = test_periodic_delete_old_message
-
-        # job.modify(func=modify_func,
-        #         trigger=scheduler_interval)
-
-
 async def sync_popular_product_jobs(scheduler: AsyncIOScheduler):
     async for session in get_session():
         result = await session.execute(
@@ -2916,24 +2349,13 @@ async def add_punkt_by_user(punkt_data: dict):
     ozon_punkt_model = OzonPunkt
 
     try:
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession() as aiosession:
-            # if punkt_marker == 'wb':
-            wb_url = f"{WB_API_URL}/pickUpPoint/{city_index}"
-            # else:
-            ozon_url = f"{OZON_API_URL}/pickUpPoint/{city_index}"
+        ozon_api_service = OzonAPIService()
+        ozon_del_zone = await ozon_api_service.get_delivery_zone(city_index)
+        print("OZON DEL ZONE", ozon_del_zone)
 
-            # Wb
-            async with aiosession.get(url=wb_url, timeout=timeout) as response:
-                wb_del_zone = await response.text()
-
-                print("WB DEL ZONE", wb_del_zone)
-            # Ozon
-            async with aiosession.get(url=ozon_url, timeout=timeout) as response:
-                ozon_del_zone = await response.text()
-
-                print("OZON DEL ZONE", ozon_del_zone)
-
+        wb_api_service = WbAPIService()
+        wb_del_zone = await wb_api_service.get_delivery_zone(city_index)
+        print("WB DEL ZONE", wb_del_zone)
     except Exception as ex:
         print("DEL ZONE REQUEST ERRROR", ex)
         await bot.edit_message_text(
@@ -3032,8 +2454,6 @@ async def add_punkt_by_user(punkt_data: dict):
                 text=success_text, chat_id=settings_msg[0], message_id=settings_msg[-1]
             )
 
-    pass
-
 
 async def new_add_punkt_by_user(punkt_data: dict):
     punkt_action: str = punkt_data.get("punkt_action")
@@ -3043,24 +2463,13 @@ async def new_add_punkt_by_user(punkt_data: dict):
     user_id: int = punkt_data.get("user_id")
 
     try:
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession() as aiosession:
-            wb_url = f"{WB_API_URL}/pickUpPoint/{city_index}"
-            ozon_url = f"{OZON_API_URL}/pickUpPoint/{city_index}"
-            # wb_url = f"http://5.61.53.235:1435/pickUpPoint/{city_index}"
-            # ozon_url = f"http://5.61.53.235:1441/pickUpPoint/{city_index}"
+        ozon_api_service = OzonAPIService()
+        ozon_del_zone = await ozon_api_service.get_delivery_zone(city_index)
+        print("OZON DEL ZONE", ozon_del_zone)
 
-            # Wb
-            async with aiosession.get(url=wb_url, timeout=timeout) as response:
-                wb_del_zone = await response.text()
-
-                print("WB DEL ZONE", wb_del_zone)
-            # Ozon
-            async with aiosession.get(url=ozon_url, timeout=timeout) as response:
-                ozon_del_zone = await response.text()
-
-                print("OZON DEL ZONE", ozon_del_zone)
-
+        wb_api_service = WbAPIService()
+        wb_del_zone = await wb_api_service.get_delivery_zone(city_index)
+        print("WB DEL ZONE", wb_del_zone)
     except Exception as ex:
         print("DEL ZONE REQUEST ERRROR", ex)
         await bot.edit_message_text(
@@ -3196,7 +2605,7 @@ async def push_check_wb_price(user_id: str, product_id: str):
         ) = res[0]
 
         if not zone:
-            zone = -1281648
+            zone = config.WB_DEFAULT_DELIVERY_ZONE
 
         name = _name if _name is not None else "Отсутствует"
         try:
@@ -3620,23 +3029,8 @@ async def new_push_check_ozon_price(user_id: str, product_id: str):
 
         name = name if name is not None else "Отсутствует"
         try:
-            timeout = aiohttp.ClientTimeout(total=30)
-            async with aiohttp.ClientSession() as aiosession:
-                if zone:
-                    _url = f"{OZON_API_URL}/product/{zone}/{short_link}"
-                    # _url = f"http://5.61.53.235:1441/product/{zone}/{short_link}"
-                else:
-                    _url = f"{OZON_API_URL}/product/{short_link}"
-                    # _url = f"http://5.61.53.235:1441/product/{short_link}"
-                async with aiosession.get(url=_url, timeout=timeout) as response:
-                    _status_code = response.status
-
-                    print(_status_code)
-
-                    res = await response.text()
-
-                if _status_code == 404:
-                    raise OzonAPICrashError()
+            api_service = OzonAPIService()
+            res = await api_service.get_product_data(short_link, zone)
 
             w = re.findall(r"\"cardPrice.*currency?", res)
 
@@ -3846,21 +3240,11 @@ async def new_push_check_wb_price(user_id: str, product_id: str):
         name = name if name is not None else "Отсутствует"
 
         if not zone:
-            zone = -1281648
+            zone = config.WB_DEFAULT_DELIVERY_ZONE
 
         try:
-            timeout = aiohttp.ClientTimeout(total=15)
-            async with aiohttp.ClientSession() as aiosession:
-                _url = f"{WB_API_URL}/product/{zone}/{short_link}"
-                # _url = f"http://5.61.53.235:1435/product/{zone}/{short_link}"
-
-                async with aiosession.get(url=_url, timeout=timeout) as response:
-                    _status_code = response.status
-
-                    res = await response.json()
-
-            if _status_code == 404:
-                raise WbAPICrashError()
+            api_service = WbAPIService()
+            res = await api_service.get_product_data(short_link, zone)
 
             d = res.get("data")
 
