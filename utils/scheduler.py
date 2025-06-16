@@ -1033,14 +1033,20 @@ async def add_product_to_db_popular_product(
         ChannelLink.name == "Общий",
     )
 
+    public_default_channel_query = select(ChannelLink).where(
+        ChannelLink.name == "Общий публичный",
+    )
+
     async with session as _session:
         high_res = await _session.execute(check_high_category_query)
         low_res = await _session.execute(check_low_category_query)
         default_channel_res = await _session.execute(default_channel_query)
+        public_default_channel_res = await _session.execute(public_default_channel_query)
 
         high_category_obj = high_res.scalar_one_or_none()
         low_category_obj = low_res.scalar_one_or_none()
         default_channel_obj = default_channel_res.scalar_one_or_none()
+        public_default_channel_obj = public_default_channel_res.scalar_one_or_none()
 
         if not high_category_obj:
             insert_data = {
@@ -1049,6 +1055,7 @@ async def add_product_to_db_popular_product(
 
             high_category_obj = Category(**insert_data)
             high_category_obj.channel_links.append(default_channel_obj)
+            high_category_obj.channel_links.append(public_default_channel_obj)
 
             session.add(high_category_obj)
             await _session.flush()
@@ -1063,6 +1070,7 @@ async def add_product_to_db_popular_product(
 
             low_category_obj = Category(**insert_data)
             low_category_obj.channel_links.append(default_channel_obj)
+            low_category_obj.channel_links.append(public_default_channel_obj)
 
             _session.add(low_category_obj)
             await _session.flush()

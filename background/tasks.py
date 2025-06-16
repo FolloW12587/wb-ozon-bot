@@ -709,21 +709,25 @@ async def notify_channels_about_popular_product_sale(
 
     _disable_notification = False
 
-    channel_links = [channel.channel_id for channel in category.channel_links]
-
-    print(channel_links)
+    # print(channel_links)
 
     _kb = create_remove_popular_kb(
         marker=product.product_marker, popular_product_id=popular_product_id
     )
 
-    for channel_link in channel_links:
+    # channel_links = [channel.channel_id for channel in category.channel_links]
+    # for channel_link in channel_links:
+    for channel in category.channel_links:
+        if not channel.is_active:
+            continue
+
+        markup = _kb if channel.is_admin else None
         _ = await bot.send_photo(
-            chat_id=channel_link,
+            chat_id=channel.channel_id,
             photo=photo_id,
             caption=_text,
             disable_notification=_disable_notification,
-            reply_markup=_kb.as_markup(),
+            reply_markup=markup.as_markup(),
         )
 
         await asyncio.sleep(0.2)

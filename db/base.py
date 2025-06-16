@@ -4,6 +4,7 @@ from sqlalchemy.engine import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import relationship
 from sqlalchemy import (
+    Boolean,
     Column,
     Integer,
     String,
@@ -217,6 +218,8 @@ class ChannelLink(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     channel_id = Column(String)
+    is_admin = Column(Boolean, default=False, server_default="false", nullable=False)
+    is_active =  Column(Boolean, default=True, server_default="true", nullable=False)
 
     categories = relationship(
         "Category",

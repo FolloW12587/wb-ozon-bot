@@ -98,6 +98,8 @@ services:
 
 networks:
   bot_network:
+    name: local_network
+    external: true
 
 volumes:
   postgres-data:
