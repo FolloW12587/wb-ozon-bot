@@ -1041,7 +1041,9 @@ async def add_product_to_db_popular_product(
         high_res = await _session.execute(check_high_category_query)
         low_res = await _session.execute(check_low_category_query)
         default_channel_res = await _session.execute(default_channel_query)
-        public_default_channel_res = await _session.execute(public_default_channel_query)
+        public_default_channel_res = await _session.execute(
+            public_default_channel_query
+        )
 
         high_category_obj = high_res.scalar_one_or_none()
         low_category_obj = low_res.scalar_one_or_none()
@@ -2227,17 +2229,35 @@ async def sync_popular_product_jobs(scheduler: AsyncIOScheduler):
         result = await session.execute(
             text(r"SELECT id FROM apscheduler_jobs where id like '%popular%';")
         )
-        existing_pp_ids = list(map(lambda r: int(r[0].split("_")[-1]), result))
-        print(existing_pp_ids)
+
+        existing_job_ids = [r[0] for r in result]
+        existing_pp_ids = list(
+            map(lambda job_id: int(job_id.split("_")[-1]), existing_job_ids)
+        )
+
+        # Получаем список актуальных ID популярных продуктов
+        popular_product_result = await session.execute(select(PopularProduct.id))
+        actual_pp_ids = set(row[0] for row in popular_product_result)
+
+        # --- Удаление задач, для которых больше нет популярных продуктов ---
+        obsolete_job_ids = [
+            job_id
+            for job_id in existing_job_ids
+            if int(job_id.split("_")[-1]) not in actual_pp_ids
+        ]
+        for job_id in obsolete_job_ids:
+            scheduler.remove_job(job_id)
+
+        # --- Добавление задач, которые отсутствуют, но должны быть ---
         popular_products_stmt = (
             select(PopularProduct.id, Product.product_marker)
             .join(Product, PopularProduct.product_id == Product.id)
             .where(~PopularProduct.id.in_(existing_pp_ids))
         )
-        print(popular_products_stmt)
+
         result = await session.execute(popular_products_stmt)
         popular_products_list = result.all()
-        print(popular_products_list)
+
         for popular_product_data in popular_products_list:
             pp_id, marker = popular_product_data
 
