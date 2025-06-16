@@ -721,13 +721,13 @@ async def notify_channels_about_popular_product_sale(
         if not channel.is_active:
             continue
 
-        markup = _kb if channel.is_admin else None
+        markup = _kb.as_markup() if channel.is_admin else None
         _ = await bot.send_photo(
             chat_id=channel.channel_id,
             photo=photo_id,
             caption=_text,
             disable_notification=_disable_notification,
-            reply_markup=markup.as_markup(),
+            reply_markup=markup,
         )
 
         await asyncio.sleep(0.2)
