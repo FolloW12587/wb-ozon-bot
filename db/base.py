@@ -219,7 +219,7 @@ class ChannelLink(Base):
     name = Column(String)
     channel_id = Column(String)
     is_admin = Column(Boolean, default=False, server_default="false", nullable=False)
-    is_active =  Column(Boolean, default=True, server_default="true", nullable=False)
+    is_active = Column(Boolean, default=True, server_default="true", nullable=False)
 
     categories = relationship(
         "Category",
@@ -243,6 +243,15 @@ class PopularProduct(Base):
 
     product = relationship(Product, back_populates="popular_products")
     category = relationship(Category, back_populates="popular_products")
+
+
+class PopularProductSaleRange(Base):
+    __tablename__ = "popular_product_sale_ranges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    start_price = Column(Integer)
+    end_price = Column(Integer)
+    coefficient = Column(Float)
 
 
 class WbPunkt(Base):
@@ -358,6 +367,7 @@ session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=
 async def get_session():
     async with session() as _session:
         yield _session
+
 
 # Base = automap_base()
 

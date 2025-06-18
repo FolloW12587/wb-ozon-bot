@@ -1,22 +1,14 @@
 import json
-import aiohttp
 import csv
+from datetime import datetime
 
-from arq import ArqRedis
-import pandas as pd
-
-from datetime import datetime, timedelta
+import aiohttp
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 
-# from .handlers import check_input_link
-
-# from background.base import _redis_pool
-
-from .storage import redis_client
-
-from config import DEV_ID, COUNTER_ID, YANDEX_TOKEN
+from utils.storage import redis_client
+from config import COUNTER_ID, YANDEX_TOKEN
 
 
 def generate_pretty_amount(price: str | float):

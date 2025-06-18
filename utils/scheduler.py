@@ -45,6 +45,7 @@ from db.base import (
 from background.base import get_redis_background_pool, _redis_pool, get_redis_pool
 
 from db.repository.product import ProductRepository
+from db.repository.popular_product_sale_range import PopularProductSaleRangeRepository
 from keyboards import (
     add_or_create_close_kb,
     create_remove_and_edit_sale_kb,
@@ -61,7 +62,7 @@ from utils.any import (
     generate_pretty_amount,
     generate_sale_for_price,
     add_message_to_delete_dict,
-    generate_sale_for_price_popular_product,
+    # generate_sale_for_price_popular_product,
     send_data_to_yandex_metica,
 )
 from utils.cities import city_index_dict
@@ -449,14 +450,15 @@ async def update_sale_for_popular_products():
 
             for popular_product in popular_products:
                 start_price = popular_product.start_price
-                popular_product.sale = generate_sale_for_price_popular_product(
+                popular_product.sale = await generate_sale_for_price_popular_product(
+                    session,
                     start_price
                 )
 
             try:
                 await _session.commit()
                 print("UDPATE POPULAR PRODUCTS SUCCESSFULLY")
-            except Exception as ex:
+            except Exception:
                 await _session.rollback()
                 print("UDPATE POPULAR PRODUCTS WITH ERROR")
 
@@ -1402,7 +1404,7 @@ async def save_popular_ozon_product(
         print("Price", _price)
 
     # _sale = generate_sale_for_price(start_price)
-    _sale = generate_sale_for_price_popular_product(start_price)  # new !
+    _sale = await generate_sale_for_price_popular_product(session, start_price)  # new !
 
     _data = {
         "link": link,
@@ -1419,6 +1421,14 @@ async def save_popular_ozon_product(
     }
 
     await add_product_to_db_popular_product(_data, session, scheduler)
+
+
+async def generate_sale_for_price_popular_product(
+    session: AsyncSession, price: float
+) -> float:
+    repo = PopularProductSaleRangeRepository(session)
+    coef = await repo.get_sale_coefficient(price)
+    return price * coef
 
 
 async def save_popular_wb_product(
@@ -1464,7 +1474,7 @@ async def save_popular_wb_product(
 
     print("WB price", _product_price)
 
-    _sale = generate_sale_for_price_popular_product(float(_product_price))
+    _sale = await generate_sale_for_price_popular_product(session, float(_product_price))
 
     _data_name = name if name else _product_name
 

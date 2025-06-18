@@ -1,11 +1,10 @@
 import json
 import re
-import aiohttp
 import asyncio
-
 from math import ceil
 from datetime import datetime, timedelta
 
+import aiohttp
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, and_, update
@@ -487,7 +486,7 @@ async def new_push_check_wb_price(cxt, user_id: str, product_id: str):
 
             except Exception as ex:
                 print(ex)
-                pass
+
     except Exception as ex:
         print("GLOBAL ERROR FROM WB TASK", ex)
 
@@ -508,7 +507,6 @@ async def add_popular_product(cxt, product_data: dict):
         _text = f"❗️ {product_marker} товар уже есть в Вашем списке"
     except OzonAPICrashError as ex:
         print("OZON API CRASH", ex)
-        pass
     except aiohttp.ClientError as ex:
         print("Таймаут по запросу к OZON API", ex)
     except Exception as ex:
@@ -734,7 +732,7 @@ async def notify_channels_about_popular_product_sale(
 
 
 async def push_check_wb_popular_product(cxt, product_id: str):
-    print(f"new фоновая задача wb (популярные товары)")
+    print("new фоновая задача wb (популярные товары)")
 
     async for session in get_session():
         async with session as _session:
@@ -771,7 +769,9 @@ async def push_check_wb_popular_product(cxt, product_id: str):
 
         try:
             api_service = WbAPIService()
-            res = await api_service.get_product_data(short_link, config.WB_DEFAULT_DELIVERY_ZONE)
+            res = await api_service.get_product_data(
+                short_link, config.WB_DEFAULT_DELIVERY_ZONE
+            )
 
             d = res.get("data")
 
@@ -885,7 +885,6 @@ async def push_check_wb_popular_product(cxt, product_id: str):
 
         except Exception as ex:
             print(ex)
-            pass
 
 
 async def periodic_delete_old_message(cxt, user_id: int):
