@@ -1320,7 +1320,7 @@ async def try_get_ozon_product_photo(
             return await image_manager.generate_photo_id_for_url(url=photo_url)
     else:
         print("URL не найден")
-    return image_manager.config.start_pic
+    return await image_manager.get_default_product_photo_id()
 
 
 async def save_popular_ozon_product(
