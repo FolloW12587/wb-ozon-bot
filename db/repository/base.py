@@ -1,4 +1,5 @@
 from typing import Generic, Type, TypeVar
+from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,21 +20,21 @@ class BaseRepository(Generic[M]):
 
         return db_model
 
-    async def find_by_id(self, model_id: int) -> M | None:
+    async def find_by_id(self, model_id: int | UUID) -> M | None:
         db_model = await self.session.execute(
             select(self.model_class).filter_by(id=model_id)
         )
 
         return db_model.scalars().first()
 
-    async def find_by_ids(self, model_ids: list[int]) -> list[M]:
+    async def find_by_ids(self, model_ids: list[int | UUID]) -> list[M]:
         db_models = await self.session.execute(
             select(self.model_class).where(self.model_class.id.in_(model_ids))
         )
 
         return db_models.scalars().all()
 
-    async def update(self, model_id: M, **kwargs):
+    async def update(self, model_id: int | UUID, **kwargs):
         await self.session.execute(
             update(self.model_class)
             .where(self.model_class.id == model_id)

@@ -3,7 +3,7 @@ import asyncio
 from uvicorn import Config, Server
 from starlette.middleware.cors import CORSMiddleware
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from aiogram import Dispatcher, types
 
@@ -21,13 +21,18 @@ from utils.scheduler import (
 )
 from utils.utm import add_utm_to_db
 
+from payments.yoomoney import yoomoney_payment_notification_handler
+from commands.send_message import send_message
+from deps import YoomoneyServiceDep
+
 from schemas import UTMSchema
 
-from config import PUBLIC_URL, FAKE_NOTIFICATION_SECRET, HOST, PORT
+import config
 
 from handlers.base import main_router
 
 from bot22 import bot
+from logger import logger
 
 
 dp = Dispatcher(storage=storage)
@@ -48,8 +53,10 @@ app.add_middleware(
 
 event_loop = asyncio.new_event_loop()
 asyncio.set_event_loop(event_loop)
-config = Config(app=app, loop=event_loop, workers=2, host=HOST, port=int(PORT))
-server = Server(config)
+app_config = Config(
+    app=app, loop=event_loop, workers=2, host=config.HOST, port=int(config.PORT)
+)
+server = Server(app_config)
 
 
 # #For set webhook
@@ -67,7 +74,9 @@ async def init_db():
 @app.on_event("startup")
 async def on_startup():
     await bot.delete_webhook()
-    await bot.set_webhook(f"{PUBLIC_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
+    await bot.set_webhook(
+        f"{config.PUBLIC_URL}{WEBHOOK_PATH}", drop_pending_updates=True
+    )
 
     redis_pool = await get_redis_background_pool()
     image_manager = ImageManager(bot)
@@ -114,10 +123,31 @@ async def send_fake_notification_by_user(
     user_id: int, product_id: int, fake_price: int, secret: str
 ):
 
-    if secret == FAKE_NOTIFICATION_SECRET:
+    if secret == config.FAKE_NOTIFICATION_SECRET:
         # print('CATCH UTM', data.__dict__)
         async for session in get_session():
             await send_fake_price(user_id, product_id, fake_price, session)
+
+
+@app.post("/yoomoney_payment_notification")
+async def yoomoney_webhook(request: Request, yoomoney_service: YoomoneyServiceDep):
+    form = await request.form()
+    data = dict(form)
+
+    try:
+        await yoomoney_payment_notification_handler(data, yoomoney_service)
+    except Exception:
+        logger.error(
+            "Error happened while processing yoomoney payment notification",
+            exc_info=True,
+        )
+        for admin in config.ADMIN_IDS:
+            await send_message(
+                admin, "Error happened while processing yoomoney payment notification"
+            )
+        return {"status": "error"}
+
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

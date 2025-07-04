@@ -53,7 +53,6 @@ from keyboards import (
 from schemas import FAQQuestion
 from states import EditSale, LocationState, NewEditSale, PunktState
 
-# from utils.any import get_excel_data
 from utils.exc import NotEnoughGraphicData
 
 from utils.handlers import (
@@ -169,17 +168,6 @@ async def start(
         print(ex)
 
 
-# @main_router.message(Command('update_sale_popular'))
-# async def test_excel(message: types.Message | types.CallbackQuery,
-#                             state: FSMContext,
-#                             session: AsyncSession,
-#                             bot: Bot,
-#                             scheduler: AsyncIOScheduler,
-#                             redis_pool: ArqRedis):
-#     asyncio.create_task(update_sale_for_popular_products())
-#     await message.answer(text='run adding...')
-
-
 @main_router.callback_query(F.data.startswith("popular_product"))
 async def delete_popular_product(
     callback: types.Message | types.CallbackQuery,
@@ -212,7 +200,6 @@ async def delete_popular_product(
         await callback.answer(text="Что то не так", show_alert=True)
 
 
-# and_f(EditSale.new_sale), F.content_type == types.ContentType.TEXT
 @main_router.message(
     and_f(LocationState.location), F.content_type == types.ContentType.LOCATION
 )
@@ -223,137 +210,6 @@ async def proccess_location(
     print(message.__dict__)
     print(message.location)
     await state.set_state()
-
-
-# @main_router.message(F.text == 'test_location')
-# async def test_location(message: types.Message | types.CallbackQuery,
-#                             state: FSMContext,
-#                             session: AsyncSession,
-#                             bot: Bot,
-#                             scheduler: AsyncIOScheduler):
-#     await state.set_state(LocationState.location)
-#     await message.answer('кинь координаты')
-#     await message.delete()
-
-# #and_f(EditSale.new_sale), F.content_type == types.ContentType.TEXT
-# @main_router.message(and_f(LocationState.location), F.content_type == types.ContentType.LOCATION)
-# async def proccess_location(message: types.Message | types.CallbackQuery,
-#                             state: FSMContext,
-#                             session: AsyncSession,
-#                             bot: Bot,
-#                             scheduler: AsyncIOScheduler):
-#     print(message.__dict__)
-#     print(message.location)
-#     await state.set_state()
-
-
-# @main_router.message(Command('test_redis'))
-# async def start(message: types.Message | types.CallbackQuery,
-#                 state: FSMContext,
-#                 session: AsyncSession,
-#                 bot: Bot,
-#                 scheduler: AsyncIOScheduler):
-#     user_id = message.chat.id
-#     key = f'fsm:{user_id}:{user_id}:data'
-
-#     async with redis_client.pipeline(transaction=True) as pipe:
-#         user_data: bytes = await pipe.get(key)
-#         results = await pipe.execute()
-#         #Извлекаем результат из выполненного pipeline
-#     print('RESULTS', results)
-#     print('USER DATA (BYTES)', user_data)
-
-#     json_user_data: dict = json.loads(results[0])
-#     print('USER DATA', json_user_data)
-
-#     dict_msg_on_delete: dict = json_user_data.get('dict_msg_on_delete')
-
-#     if dict_msg_on_delete:
-#         for _key in list(dict_msg_on_delete.keys()):
-#             chat_id, message_date = dict_msg_on_delete.get(_key)
-#             date_now = datetime.now()
-
-#             print((datetime.fromtimestamp(date_now.timestamp()) - datetime.fromtimestamp(message_date)) > timedelta(seconds=5))
-#             if (datetime.fromtimestamp(date_now.timestamp()) - datetime.fromtimestamp(message_date)) > timedelta(seconds=5):
-#                 try:
-#                     await bot.delete_message(chat_id=chat_id,
-#                                             message_id=_key)
-#                     # await bot.delete_messages() # что будет если какое то сообщение не сможет удалиться и произойдет ошибка ???
-#                 except Exception as ex:
-#                     del dict_msg_on_delete[_key]
-#                     print(ex)
-#                 else:
-#                     del dict_msg_on_delete[_key]
-
-#     async with redis_client.pipeline(transaction=True) as pipe:
-#         bytes_data = json.dumps(json_user_data)
-#         await pipe.set(key, bytes_data)
-#         results = await pipe.execute()
-
-#     await message.delete()
-
-
-# @main_router.message(Command('dev_func'))
-# async def dev_func(message: types.Message | types.CallbackQuery,
-#                    state: FSMContext,
-#                    session: AsyncSession,
-#                    bot: Bot,
-#                    scheduler: AsyncIOScheduler):
-#     if not message.from_user.id == int(DEV_ID):
-#         return
-
-#     query = (
-#         select(
-#             UserProduct.user_id,
-#             Product.product_marker,
-#         )\
-#         .join(Product,
-#               UserProduct.product_id == Product.id)
-#     )
-
-#     async with session as _session:
-#         res = await _session.execute(query)
-
-#     user_products = res.fetchall()
-
-#     if not user_products:
-#         print('not UserProducts data')
-#         return
-
-#     async with session as _session:
-
-#         for user_id, product_marker in user_products:
-#             if product_marker == 'wb':
-#                 update_query = (
-#                     update(
-#                         User
-#                     )\
-#                     .values(
-#                         wb_total_count=User.wb_total_count + 1,
-#                     )\
-#                     .where(
-#                         User.tg_id == user_id,
-#                     )
-#                 )
-#             else:
-#                 update_query = (
-#                     update(
-#                         User
-#                     )\
-#                     .values(
-#                         ozon_total_count=User.ozon_total_count + 1,
-#                     )\
-#                     .where(
-#                         User.tg_id == user_id,
-#                     )
-#                 )
-
-#             await _session.execute(update_query)
-#         try:
-#             await _session.commit()
-#         except Exception as ex:
-#             print(ex)
-#             _session.rollback()
 
 
 @main_router.callback_query(F.data == "faq")
@@ -402,9 +258,6 @@ async def back_to_faq(
         await bot.delete_messages(
             chat_id=callback.from_user.id, message_ids=question_msg_list
         )
-        # for _msg in question_msg_list:
-        #     await bot.delete_message(chat_id=callback.from_user.id,
-        #                              message_id=_msg)
     except Exception:
         print("ERROR WITH DELETE FAQ MESSAGES")
 
@@ -434,9 +287,6 @@ async def exit_faq(
         await bot.delete_messages(
             chat_id=callback.from_user.id, message_ids=question_msg_list
         )
-        # for _msg in question_msg_list:
-        #     await bot.delete_message(chat_id=callback.from_user.id,
-        #                              message_id=_msg)
     except Exception as ex:
         print("ERROR WITH DELETE FAQ MESSAGES", ex)
 
@@ -470,7 +320,6 @@ async def question_callback(
     except Exception as ex:
         print("ERROR WITH DELETE FAQ QUESTION LIST MESSAGE", ex)
 
-    # images = faq_pic_dict.get(question)
     images = await image_manager.get_faq_photo_ids(FAQQuestion(question))
 
     media_group = [types.InputMediaPhoto(media=file_id) for file_id in images]
@@ -501,109 +350,6 @@ async def question_callback(
     await callback.answer()
 
 
-# @main_router.message(F.text == 'Добавить товар')
-# async def add_any_product(message: types.Message | types.CallbackQuery,
-#                             state: FSMContext,
-#                             session: AsyncSession,
-#                             bot: Bot,
-#                             scheduler: AsyncIOScheduler):
-#     await state.set_state(AnyProductStates.link)
-
-#     _text = 'Отправьте ссылку на товар'
-
-#     _kb = create_or_add_exit_btn()
-
-#     try:
-#         add_msg = await bot.send_message(chat_id=message.chat.id,
-#                                         text=_text,
-#                                         reply_markup=_kb.as_markup())
-#     except Exception as ex:
-#         print(f'STRANGE EEROR WITH ADD PRODUCT WITH BUTTON FOR USER {message.chat.id} {message.from_user.username}', ex)
-#         # add_msg = await message.answer('Странная ошибка, потерпи немного, разбираюсь...')
-#         return
-
-#     await add_message_to_delete_dict(add_msg,
-#                                      state)
-
-#     await state.update_data(add_msg=(add_msg.chat.id, add_msg.message_id))
-
-#     try:
-#         await message.delete()
-#     except Exception:
-#         pass
-
-
-# @main_router.message(and_f(AnyProductStates.link, F.content_type == types.ContentType.TEXT))
-# async def any_product_proccess(message: types.Message | types.CallbackQuery,
-#                             state: FSMContext,
-#                             session: AsyncSession,
-#                             bot: Bot,
-#                             scheduler: AsyncIOScheduler):
-#     data = await state.get_data()
-
-#     add_msg: tuple = data.get('add_msg')
-
-#     if message.text == 'Посмотреть товары':
-#         try:
-#             await bot.delete_message(chat_id=add_msg[0],
-#                                      message_id=add_msg[-1])
-#         except Exception as ex:
-#             print(ex)
-
-#         await state.set_state()
-#         await get_all_products_by_user(message,
-#                                        state,
-#                                        session,
-#                                        bot,
-#                                        scheduler)
-#         return
-
-#     print('add msg', add_msg)
-
-#     _message_text = message.text.strip().split()
-
-#     _name = link = None
-
-#     if len(_message_text) > 1:
-#         *_name, link = _message_text
-#         _name = ' '.join(_name)
-#     else:
-#         link = message.text.strip()
-
-#     check_link = check_input_link(link) # None or Literal['WB', 'OZON']
-
-#     if check_link:
-#         await delete_prev_subactive_msg(data)
-#         sub_active_msg: types.Message = await message.answer(text=f'{check_link} товар добавляется...')
-
-#         user_data = {
-#             'msg': (message.chat.id, message.message_id),
-#             'name': _name,
-#             'link': link,
-#             '_add_msg_id': sub_active_msg.message_id,
-#             'product_marker': check_link,
-#         }
-
-#         scheduler.add_job(add_product_task, DateTrigger(run_date=datetime.now()), (user_data, ))
-#     else:
-#         await delete_prev_subactive_msg(data)
-#         sub_active_msg: types.Message = await message.answer(text='Невалидная ссылка')
-
-#     await add_message_to_delete_dict(sub_active_msg,
-#                                      state)
-
-#     await state.update_data(_add_msg=(sub_active_msg.chat.id, sub_active_msg.message_id))
-
-#     try:
-#         await state.set_state()
-#         await bot.delete_message(chat_id=add_msg[0],
-#                                  message_id=add_msg[-1])
-#         await message.delete()
-#     except Exception as ex:
-#         print(ex)
-#         pass
-
-
 @main_router.message(F.text == "Посмотреть товары")
 async def get_all_products_by_user(
     message: types.Message | types.CallbackQuery,
@@ -614,114 +360,6 @@ async def get_all_products_by_user(
     await state.update_data(view_product_dict=None)
 
     data = await state.get_data()
-
-    # if not message.from_user.id in (int(DEV_ID), int(SUB_DEV_ID)):
-
-    #     subquery_wb = (
-    #         select(UserJob.job_id,
-    #             UserJob.user_id,
-    #             UserJob.product_id)
-    #         .where(UserJob.user_id == message.from_user.id)
-    #     ).subquery()
-
-    #     wb_query = (
-    #         select(WbProduct.id,
-    #             WbProduct.link,
-    #             cast(WbProduct.actual_price, Integer).label('actual_price'),
-    #             cast(WbProduct.start_price, Integer).label('start_price'),
-    #             WbProduct.user_id,
-    #             cast(func.extract('epoch', WbProduct.time_create), Float).label('time_create'),
-    #             func.text('wb').label('product_marker'),
-    #             WbProduct.name,
-    #             WbProduct.sale,
-    #             subquery_wb.c.job_id)\
-    #         .select_from(WbProduct)\
-    #         .join(User,
-    #             WbProduct.user_id == User.tg_id)\
-    #         .join(UserJob,
-    #             UserJob.user_id == User.tg_id)\
-    #         .outerjoin(subquery_wb,
-    #                 subquery_wb.c.product_id == WbProduct.id)\
-    #         .where(User.tg_id == message.from_user.id)\
-    #         .distinct(WbProduct.id)
-    #     )
-
-    #     subquery_ozon = (
-    #         select(UserJob.job_id,
-    #             UserJob.user_id,
-    #             UserJob.product_id)
-    #         .where(UserJob.user_id == message.from_user.id)
-    #     ).subquery()
-
-    #     ozon_query = (
-    #         select(
-    #             OzonProductModel.id,
-    #             OzonProductModel.link,
-    #             cast(OzonProductModel.actual_price, Integer).label('actual_price'),
-    #             cast(OzonProductModel.start_price, Integer).label('start_price'),
-    #             OzonProductModel.user_id,
-    #             cast(func.extract('epoch', OzonProductModel.time_create), Float).label('time_create'),
-    #             func.text('ozon').label('product_marker'),
-    #             OzonProductModel.name,
-    #             OzonProductModel.sale,
-    #             subquery_ozon.c.job_id)\
-    #         .select_from(OzonProductModel)\
-    #         .join(User,
-    #             OzonProductModel.user_id == User.tg_id)\
-    #         .join(UserJob,
-    #             UserJob.user_id == User.tg_id)\
-    #         .outerjoin(subquery_ozon,
-    #                 subquery_ozon.c.product_id == OzonProductModel.id)\
-    #         .where(User.tg_id == message.from_user.id)\
-    #         .distinct(OzonProductModel.id)
-    #     )
-
-    #     async with session as _session:
-    #         res = await _session.execute(wb_query.union(ozon_query))
-
-    #     product_list = res.fetchall()
-
-    #     if not product_list:
-    #         await delete_prev_subactive_msg(data)
-
-    #         sub_active_msg = await message.answer('Нет добавленных продуктов')
-
-    #         await add_message_to_delete_dict(sub_active_msg,
-    #                                         state)
-
-    #         await state.update_data(_add_msg=(sub_active_msg.chat.id, sub_active_msg.message_id))
-    #         return
-
-    #     len_product_list = len(product_list)
-
-    #     product_list = sorted(list(map(lambda el: tuple(el), product_list)),
-    #                         key=lambda el: el[5],   # sort by time_create field
-    #                         reverse=True)           # order by desc
-    #     try:
-    #         wb_product_count = sum(1 for product in product_list if product[6] == 'wb')
-    #         ozon_product_count = len_product_list - wb_product_count
-    #     except Exception as ex:
-    #         print('sum eror', ex)
-    #         wb_product_count = 0
-    #         ozon_product_count = len_product_list
-
-    #     pages = ceil(len_product_list / DEFAULT_PAGE_ELEMENT_COUNT)
-    #     current_page = 1
-
-    #     view_product_dict = {
-    #         'len_product_list': len_product_list,
-    #         'pages': pages,
-    #         'current_page': current_page,
-    #         'product_list': product_list,
-    #         'ozon_product_count': ozon_product_count,
-    #         'wb_product_count': wb_product_count,
-    #     }
-
-    #     await show_product_list(view_product_dict,
-    #                             message.from_user.id,
-    #                             state)
-    # else:
-    # new
 
     # pylint: disable=not-callable
     query = (
