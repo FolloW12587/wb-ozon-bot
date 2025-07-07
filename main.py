@@ -136,15 +136,16 @@ async def yoomoney_webhook(request: Request, yoomoney_service: YoomoneyServiceDe
 
     try:
         await yoomoney_payment_notification_handler(data, yoomoney_service)
+        await send_message(config.PAYMENTS_CHAT_ID, "New yoomoney payment notification")
     except Exception:
         logger.error(
             "Error happened while processing yoomoney payment notification",
             exc_info=True,
         )
-        for admin in config.ADMIN_IDS:
-            await send_message(
-                admin, "Error happened while processing yoomoney payment notification"
-            )
+        await send_message(
+            config.PAYMENTS_CHAT_ID,
+            "Error happened while processing yoomoney payment notification",
+        )
         return {"status": "error"}
 
     return {"status": "ok"}

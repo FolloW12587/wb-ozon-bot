@@ -2,19 +2,35 @@ from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
 
-from db.base import Order, OrderStatus, User, get_session
+from commands.send_message import send_message
+from db.base import Order, OrderStatus, Transaction, User, get_session
 from db.repository.transaction import TransactionRepository
 from db.repository.order import OrderRepository
 from db.repository.user_subscription import UserSubscriptionRepository
 from db.repository.user import UserRepository
 
 from payments.errors import TransactionProcessError
+import config
 
 
 from logger import logger
 
 
 async def process_transaction(cxt, transaction_id: int):
+    try:
+        transaction = await __process_transaction(transaction_id)
+        await send_message(transaction.user_id, "Спасибо за оформление подписки!")
+    except Exception:
+        logger.error(
+            "Transaction %s was not processed correctly", transaction_id, exc_info=True
+        )
+        await send_message(
+            config.PAYMENTS_CHAT_ID,
+            f"Error happened while processing transaction {transaction_id}",
+        )
+
+
+async def __process_transaction(transaction_id: int) -> Transaction:
     logger.info("Proccessing transaction %s", transaction_id)
     async for session in get_session():
         transaction_repo = TransactionRepository(session)
@@ -58,6 +74,8 @@ async def process_transaction(cxt, transaction_id: int):
 
         await __process_order(user_subscription_repo, order_repo, order, user)
         logger.info("Transaction %s processed successfully", transaction.id)
+
+        return transaction
 
 
 async def __is_order_processed(
