@@ -18,7 +18,7 @@ async def send_message(
         | ReplyKeyboardRemove
         | ForceReply
         | None
-    ),
+    ) = None,
 ) -> int:
     msg = await bot.send_message(
         chat_id=chat_id,

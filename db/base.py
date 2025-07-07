@@ -1,18 +1,28 @@
+from datetime import datetime
+import enum
+from uuid import uuid4
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.engine import create_engine
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import relationship
 from sqlalchemy import (
+    UUID,
     Boolean,
     Column,
+    Date,
+    DateTime,
+    Enum,
     Integer,
+    JSON,
     String,
     ForeignKey,
     Float,
     TIMESTAMP,
     BigInteger,
     Table,
+    func,
+    text,
 )
 
 from config import db_url, _db_url
@@ -22,15 +32,81 @@ from config import db_url, _db_url
 Base = automap_base()
 
 
+# -- Subscriptions
+
+
 class Subscription(Base):
     __tablename__ = "subscriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
+    name = Column(String, nullable=False)
     wb_product_limit = Column(Integer)
     ozon_product_limit = Column(Integer)
+    price_rub = Column(Integer, nullable=False)
 
     users = relationship("User", back_populates="subscription")
+
+
+class UserSubscription(Base):
+    __tablename__ = "user_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.tg_id"), nullable=False)
+    order_id = Column(UUID, ForeignKey("orders.id"), nullable=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
+    active_from = Column(Date, nullable=False)
+    active_to = Column(Date, nullable=True)  # Если None - бессрочная
+
+
+class PaymentProvider(enum.Enum):
+    YOOMONEY = "YOOMONEY"
+    # TELEGRAM = "TELEGRAM"
+    # MANUAL = "MANUAL"
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.tg_id"))  # Telegram user ID
+    order_id = Column(UUID, ForeignKey("orders.id"), nullable=False)  # Ссылка на ордер
+
+    provider = Column(Enum(PaymentProvider), nullable=False)  # откуда платёж
+    provider_txn_id = Column(String, nullable=True)  # ID транзакции в сторонней системе
+
+    amount = Column(Float, nullable=False)
+    currency = Column(String, default="643")  # пригодится, если появятся иные
+
+    transaction_datetime = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    raw_data = Column(JSON, nullable=True)  # полный JSON от платёжки
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Transaction {self.provider} {self.amount} {self.status}>"
+
+
+class OrderStatus(enum.Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(
+        UUID, primary_key=True, default=uuid4, server_default=func.gen_random_uuid()
+    )
+    user_id = Column(BigInteger, ForeignKey("users.tg_id"))  # Telegram user ID
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"))  # id подписки
+    status = Column(String, nullable=False, default=OrderStatus.PENDING.value)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    transaction = relationship("Transaction", uselist=False)
+
+
+# --------
 
 
 class User(Base):
@@ -349,32 +425,14 @@ class UserJob(Base):
     user = relationship(User, back_populates="jobs")
 
 
-# Создаем асинхронный движок и сессию
-# DATABASE_URL = "sqlite+aiosqlite:///test.db"
-
 sync_engine = create_engine(_db_url, echo=True)
 
-
-# Base.prepare(engine, reflect=True)
 Base.prepare(autoload_with=sync_engine)
-# Base.metadata.reflect(bind=sync_engine)
 
 engine = create_async_engine(db_url, echo=True)
 session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-# AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def get_session():
     async with session() as _session:
         yield _session
-
-
-# Base = automap_base()
-
-# engine = create_engine(db_url,
-#                        echo=True)
-
-# # Base.prepare(engine, reflect=True)
-# Base.prepare(autoload_with=engine)
-
-# session = sessionmaker(engine, expire_on_commit=False)

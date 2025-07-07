@@ -6,6 +6,7 @@ services:
       - ./.env
     environment:
       - POSTGRES_HOST=psql_db
+      - LOG_DIR=/var/log/bot
     ports:
       - '8001:8001'
     command: sh -c 'python main.py'
@@ -14,10 +15,11 @@ services:
     volumes:
       - ./static:/app/static
       - ./data:/app/data
+      - ./logs/bot:/var/log/bot
     logging:
       driver: "json-file"
       options:
-          max-size: "20m"
+        max-size: "20m"
 
   redis_tg_bot_db:
     image: redis:alpine
@@ -36,7 +38,7 @@ services:
     logging:
       driver: "json-file"
       options:
-          max-size: "20m"
+        max-size: "20m"
 
   arq_high:
     build: .
@@ -46,9 +48,11 @@ services:
       - POSTGRES_HOST=psql_db
       - REDIS_HOST=redis_tg_bot_db
       # - DB_PORT=5432
-
+      - LOG_DIR=/var/log/arq
     networks:
       - bot_network
+    volumes:
+      - ./logs/arq:/var/log/arq
     command: arq background.high_worker.WorkerSettings
     depends_on:
       - redis_tg_bot_db
@@ -100,7 +104,6 @@ services:
     # command: postgres -c max_connections=100 -c shared_buffers=2GB -c work_mem=16MB -c maintenance_work_mem=512MB -c effective_cache_size=6GB
     logging:
       driver: "json-file"
-
   # redis_tg_bot_db:
   #   image: redis:alpine
   #   restart: on-failure

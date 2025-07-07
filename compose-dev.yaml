@@ -7,6 +7,7 @@ services:
       - ./.env
     environment:
       - POSTGRES_HOST=psql_db
+      - LOG_DIR=/var/log/bot
     ports:
       - '8001:8001'
     command: sh -c 'python main.py'
@@ -15,6 +16,7 @@ services:
     volumes:
       - ./static:/app/static
       - ./data:/app/data
+      - ./logs/bot:/var/log/bot
     logging:
       driver: "json-file"
       options:
@@ -45,12 +47,14 @@ services:
     environment:
       - POSTGRES_HOST=psql_db
       - REDIS_HOST=redis_tg_bot_db
-
+      - LOG_DIR=/var/log/arq
     networks:
       - bot_network
     command: arq background.high_worker.WorkerSettings
     depends_on:
       - redis_tg_bot_db
+    volumes:
+      - ./logs/arq:/var/log/arq
 
   arq_low:
     build: .
