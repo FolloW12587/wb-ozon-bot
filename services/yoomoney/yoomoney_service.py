@@ -40,10 +40,10 @@ class YoomoneyService:
         self._order_repo = order_repo
 
     async def process_transaction_data(self, data: dict) -> Transaction:
-        order = self.__validate_transaction(data)
+        order = await self.__validate_transaction(data)
         try:
             notification_data = YoomoneyNotificationData(**data)
-            return self._transaction_repo.save_yoomoney_transaction(
+            return await self._transaction_repo.save_yoomoney_transaction(
                 notification_data, order, data
             )
         except Exception as e:
@@ -68,7 +68,7 @@ class YoomoneyService:
             if key != "notification_secret":
                 s += f"{data.get(key)}&"
                 continue
-            key += f"{self._notification_secret}&"
+            s += f"{self._notification_secret}&"
 
         if data.get("label"):
             s = s[:-1]
@@ -78,4 +78,4 @@ class YoomoneyService:
         if sha1_hash_hex != data.get("sha1_hash"):
             raise HashValidationError()
 
-        return Order
+        return order

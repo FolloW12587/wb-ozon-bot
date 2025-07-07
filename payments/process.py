@@ -35,7 +35,7 @@ async def process_transaction(cxt, transaction_id: int):
                 f"for transaction {transaction_id} to process"
             )
 
-        if order.status != OrderStatus.PENDING:
+        if order.status != OrderStatus.PENDING.value:
             raise TransactionProcessError(
                 f"Order {order.id} status is not pending: {order.status}"
             )
@@ -56,7 +56,7 @@ async def process_transaction(cxt, transaction_id: int):
             logger.info("Order %s is already processed", order.id)
             return
 
-        order = await __process_order(user_subscription_repo, order_repo, order, user)
+        await __process_order(user_subscription_repo, order_repo, order, user)
         logger.info("Transaction %s processed successfully", transaction.id)
 
 
@@ -71,7 +71,7 @@ async def __process_order(
     order_repo: OrderRepository,
     order: Order,
     user: User,
-) -> Order:
+):
     active_from = await us_repo.get_start_date_for_new_subscription(user.tg_id)
     active_to = active_from + relativedelta(months=1) - relativedelta(days=1)
 
@@ -84,8 +84,4 @@ async def __process_order(
     )
     logger.info("Created new user subscription %s", user_subscription.id)
 
-    order = await order_repo.update(order.id, {"status": OrderStatus.SUCCESS})
-    if not order:
-        raise TransactionProcessError("Error while updating order occured!")
-
-    return order
+    await order_repo.update(order.id, status=OrderStatus.SUCCESS.value)

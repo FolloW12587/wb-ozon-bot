@@ -42,7 +42,7 @@ class Subscription(Base):
     name = Column(String, nullable=False)
     wb_product_limit = Column(Integer)
     ozon_product_limit = Column(Integer)
-    price_rub = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    price_rub = Column(Integer, nullable=False)
 
     users = relationship("User", back_populates="subscription")
 
@@ -51,7 +51,7 @@ class UserSubscription(Base):
     __tablename__ = "user_subscriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.tg_id"), nullable=False)
     order_id = Column(UUID, ForeignKey("orders.id"), nullable=True)
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
     active_from = Column(Date, nullable=False)
@@ -59,9 +59,9 @@ class UserSubscription(Base):
 
 
 class PaymentProvider(enum.Enum):
-    YOOMONEY = "yoomoney"
-    # TELEGRAM = "telegram"
-    # MANUAL = "manual"
+    YOOMONEY = "YOOMONEY"
+    # TELEGRAM = "TELEGRAM"
+    # MANUAL = "MANUAL"
 
 
 class Transaction(Base):
@@ -69,7 +69,7 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(BigInteger, ForeignKey("users.tg_id"))  # Telegram user ID
-    order_id = Column(UUID, ForeignKey("order.id"), nullable=False)  # Ссылка на ордер
+    order_id = Column(UUID, ForeignKey("orders.id"), nullable=False)  # Ссылка на ордер
 
     provider = Column(Enum(PaymentProvider), nullable=False)  # откуда платёж
     provider_txn_id = Column(String, nullable=True)  # ID транзакции в сторонней системе
@@ -77,7 +77,7 @@ class Transaction(Base):
     amount = Column(Float, nullable=False)
     currency = Column(String, default="643")  # пригодится, если появятся иные
 
-    transaction_datetime = Column(DateTime, nullable=True)
+    transaction_datetime = Column(TIMESTAMP(timezone=True), nullable=True)
 
     raw_data = Column(JSON, nullable=True)  # полный JSON от платёжки
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -87,9 +87,9 @@ class Transaction(Base):
 
 
 class OrderStatus(enum.Enum):
-    PENDING = "pending"
-    SUCCESS = "success"
-    FAILED = "failed"
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
 
 
 class Order(Base):
@@ -100,10 +100,10 @@ class Order(Base):
     )
     user_id = Column(BigInteger, ForeignKey("users.tg_id"))  # Telegram user ID
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"))  # id подписки
-    status = Column(String, nullable=False, default=OrderStatus.PENDING)
+    status = Column(String, nullable=False, default=OrderStatus.PENDING.value)
 
     created_at = Column(DateTime, default=datetime.utcnow)
-    transaction = relationship("Transaction", uselist=False, backref="order")
+    transaction = relationship("Transaction", uselist=False)
 
 
 # --------

@@ -25,7 +25,7 @@ class BaseRepository(Generic[M]):
             select(self.model_class).filter_by(id=model_id)
         )
 
-        return db_model.scalars().first()
+        return db_model.scalar_one_or_none()
 
     async def find_by_ids(self, model_ids: list[int | UUID]) -> list[M]:
         db_models = await self.session.execute(

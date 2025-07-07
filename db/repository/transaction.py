@@ -16,11 +16,10 @@ class TransactionRepository(BaseRepository[Transaction]):
         transaction = Transaction(
             user_id=order.user_id,
             order_id=order.id,
-            provider=PaymentProvider.YOOMONEY.value,
+            provider=PaymentProvider.YOOMONEY,
             provider_txn_id=data.operation_id,
             amount=data.amount,
             currency=data.currency,
-            status="success",
             transaction_datetime=data.datetime,
             raw_data=raw_data,
         )

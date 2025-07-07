@@ -129,7 +129,7 @@ async def send_fake_notification_by_user(
             await send_fake_price(user_id, product_id, fake_price, session)
 
 
-@app.post("/yoomoney_payment_notification")
+@app.post("/payments/yoomoney_payment_notification")
 async def yoomoney_webhook(request: Request, yoomoney_service: YoomoneyServiceDep):
     form = await request.form()
     data = dict(form)
