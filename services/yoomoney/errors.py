@@ -8,3 +8,7 @@ class OrderNotExists(Exception):
 
 class YoomoneyServiceError(Exception):
     pass
+
+
+class TransactionIncorrectPrice(Exception):
+    pass

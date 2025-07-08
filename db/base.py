@@ -101,6 +101,7 @@ class Order(Base):
     user_id = Column(BigInteger, ForeignKey("users.tg_id"))  # Telegram user ID
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"))  # id подписки
     status = Column(String, nullable=False, default=OrderStatus.PENDING.value)
+    price = Column(Float, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     transaction = relationship("Transaction", uselist=False)

@@ -11,8 +11,9 @@ class OrderRepository(BaseRepository[Order]):
     async def generate_order(self, subscription: Subscription, user: User) -> Order:
         order = Order(
             user_id=user.tg_id,
-            subscription=subscription.id,
-            status=OrderStatus.PENDING,
+            subscription_id=subscription.id,
+            status=OrderStatus.PENDING.value,
+            price=subscription.price_rub,
         )
         self.session.add(order)
         await self.session.commit()

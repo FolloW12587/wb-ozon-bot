@@ -30,12 +30,14 @@ from schemas import UTMSchema
 import config
 
 from handlers.base import main_router
+from handlers.payments import router as payments_router
 
 from bot22 import bot
 from logger import logger
 
 
 dp = Dispatcher(storage=storage)
+dp.include_router(payments_router)
 dp.include_router(main_router)
 
 

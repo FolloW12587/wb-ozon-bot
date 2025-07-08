@@ -9,6 +9,7 @@ from services.yoomoney.yoomoney_dto import YoomoneyNotificationData
 from services.yoomoney.errors import (
     HashValidationError,
     OrderNotExists,
+    TransactionIncorrectPrice,
     YoomoneyServiceError,
 )
 
@@ -62,6 +63,13 @@ class YoomoneyService:
         order = await self._order_repo.find_by_id(order_id)
         if not order:
             raise OrderNotExists(f"Order with id {order_id} doesn't exist")
+
+        amount = data.get("amount")
+        if order.price != float(amount):
+            raise TransactionIncorrectPrice(
+                "Order and transaction has different amounts. "
+                f"Order: {order.price}, transaction: {amount}"
+            )
 
         s = ""
         for key in HASH_STRING_KEYS:
