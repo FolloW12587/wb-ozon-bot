@@ -2035,6 +2035,10 @@ async def any_input(
     state: FSMContext,
     redis_pool: ArqRedis,
 ):
+    print(message)
+    if message.chat.type != "private":
+        return
+
     data = await state.get_data()
 
     await delete_prev_subactive_msg(data)
