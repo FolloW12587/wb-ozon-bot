@@ -65,10 +65,12 @@ class YoomoneyService:
             raise OrderNotExists(f"Order with id {order_id} doesn't exist")
 
         amount = data.get("amount")
-        if order.price != float(amount):
+        withdraw_amount = data.get("withdraw_amount")
+        if order.price != float(amount) and order.price != float(withdraw_amount):
             raise TransactionIncorrectPrice(
                 "Order and transaction has different amounts. "
-                f"Order: {order.price}, transaction: {amount}"
+                f"Order: {order.price}, transaction amount: {amount}, "
+                f"transaction withdraw amount: {withdraw_amount}"
             )
 
         s = ""
