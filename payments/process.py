@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
+from aiogram import types
 from dateutil.relativedelta import relativedelta
 
 from commands.send_message import send_message
-from db.base import Order, OrderStatus, Transaction, User, get_session
+from db.base import Order, OrderStatus, Transaction, User, UserSubscription, get_session
 from db.repository.transaction import TransactionRepository
 from db.repository.order import OrderRepository
 from db.repository.user_subscription import UserSubscriptionRepository
@@ -18,16 +20,26 @@ from logger import logger
 
 async def process_transaction(cxt, transaction_id: int):
     try:
-        transaction = await __process_transaction(transaction_id)
-        await send_message(transaction.user_id, "Спасибо за оформление подписки!")
+        _ = await __process_transaction(transaction_id)
     except Exception:
         logger.error(
             "Transaction %s was not processed correctly", transaction_id, exc_info=True
         )
-        await send_message(
-            config.PAYMENTS_CHAT_ID,
-            f"Error happened while processing transaction {transaction_id}",
-        )
+        await __transaction_process_failed(transaction_id)
+
+
+async def __transaction_process_failed(transaction_id: int):
+    await send_message(
+        config.PAYMENTS_CHAT_ID,
+        f"Ошибка при обработке транзакции {transaction_id}",
+    )
+    async for session in get_session():
+        transaction_repo = TransactionRepository(session)
+        transaction = await transaction_repo.find_by_id(transaction_id)
+        if not transaction:
+            return
+
+        await notify_user_about_fail(transaction.user_id)
 
 
 async def __process_transaction(transaction_id: int) -> Transaction:
@@ -72,9 +84,13 @@ async def __process_transaction(transaction_id: int) -> Transaction:
             logger.info("Order %s is already processed", order.id)
             return
 
-        await __process_order(user_subscription_repo, order_repo, order, user)
-        logger.info("Transaction %s processed successfully", transaction.id)
+        user_subscription = await __process_order(
+            user_subscription_repo, user_repo, order_repo, order, user
+        )
 
+        await __notify_user_about_purchsed_subscription(user_subscription, user_id)
+
+        logger.info("Transaction %s processed successfully", transaction.id)
         return transaction
 
 
@@ -86,10 +102,11 @@ async def __is_order_processed(
 
 async def __process_order(
     us_repo: UserSubscriptionRepository,
+    user_repo: UserRepository,
     order_repo: OrderRepository,
     order: Order,
     user: User,
-):
+) -> UserSubscription:
     active_from = await us_repo.get_start_date_for_new_subscription(user.tg_id)
     active_to = active_from + relativedelta(months=1) - relativedelta(days=1)
 
@@ -102,4 +119,65 @@ async def __process_order(
     )
     logger.info("Created new user subscription %s", user_subscription.id)
 
+    await __set_subscription_to_user_if_needed(user_repo, user, user_subscription)
     await order_repo.update(order.id, status=OrderStatus.SUCCESS.value)
+
+    return user_subscription
+
+
+async def __set_subscription_to_user_if_needed(
+    user_repo: UserRepository, user: User, user_subscription: UserSubscription
+):
+    now = datetime.now(timezone.utc).date()
+    if user_subscription.active_from <= now <= user_subscription.active_to:
+        logger.info("User subscription is set to %s", user_subscription.subscription_id)
+        await user_repo.update(
+            user.tg_id, subscription_id=user_subscription.subscription_id
+        )
+
+
+async def __notify_user_about_purchsed_subscription(
+    user_subscription: UserSubscription, user_id: int
+):
+    logger.info(
+        "Notifying user %s about new purchased subscription %s",
+        user_id,
+        user_subscription.id,
+    )
+    text = f"""
+*🎉 Подписка успешно оформлена!*
+
+Спасибо за оплату — вы получили доступ ко всем функциям:
+
+✔️ Безлимит на отслеживаемые товары
+✔️ График изменения цен
+✔️ Выбор пункта выдачи
+
+*🗓 Подписка активна до {user_subscription.active_to}*
+
+_Мы заранее напомним вам за 5 дней до окончания, чтобы вы могли продлить без перерыва в работе._
+
+Приятных покупок и выгодных скидок! 💸"""
+    try:
+        await send_message(user_id, text)
+    except Exception:
+        logger.error("Error in notifying user about new sdubscription", exc_info=True)
+        raise
+
+
+async def notify_user_about_fail(user_id: int):
+    logger.info("Notifying user %s about transaction processing fail", user_id)
+    text = f"""
+*❌ Не удалось оформить подписку*
+
+Пожалуйста, напишите [нам в поддержку]({config.SUPPORT_BOT_URL}) и мы обязательно вам поможем.
+"""
+    btn = types.InlineKeyboardButton(text="Тех. поддержка", url=config.SUPPORT_BOT_URL)
+
+    markup = types.InlineKeyboardMarkup(inline_keyboard=[[btn]])
+    try:
+        await send_message(user_id, text, markup)
+    except Exception:
+        logger.error(
+            "Error in notifying user abput failed transaction processing", exc_info=True
+        )

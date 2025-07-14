@@ -22,7 +22,6 @@ from utils.scheduler import (
 from utils.utm import add_utm_to_db
 
 from payments.yoomoney import yoomoney_payment_notification_handler
-from commands.send_message import send_message
 from deps import YoomoneyServiceDep
 
 from schemas import UTMSchema
@@ -30,7 +29,7 @@ from schemas import UTMSchema
 import config
 
 from handlers.base import main_router
-from handlers.payments import router as payments_router
+from handlers.subscription import router as payments_router
 
 from bot22 import bot
 from logger import logger
@@ -138,15 +137,10 @@ async def yoomoney_webhook(request: Request, yoomoney_service: YoomoneyServiceDe
 
     try:
         await yoomoney_payment_notification_handler(data, yoomoney_service)
-        await send_message(config.PAYMENTS_CHAT_ID, "New yoomoney payment notification")
     except Exception:
         logger.error(
             "Error happened while processing yoomoney payment notification",
             exc_info=True,
-        )
-        await send_message(
-            config.PAYMENTS_CHAT_ID,
-            "Error happened while processing yoomoney payment notification",
         )
         return {"status": "error"}
 

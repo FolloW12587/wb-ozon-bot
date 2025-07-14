@@ -1,5 +1,3 @@
-
-
 class OzonProductExistsError(Exception):
     pass
 
@@ -17,4 +15,8 @@ class WbProductExistsError(Exception):
 
 
 class NotEnoughGraphicData(Exception):
+    pass
+
+
+class Forbidden(Exception):
     pass

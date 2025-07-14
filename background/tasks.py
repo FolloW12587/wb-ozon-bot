@@ -2,7 +2,7 @@ import json
 import re
 import asyncio
 from math import ceil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
@@ -22,10 +22,12 @@ from db.base import (
 )
 
 from db.repository.popular_product import PopularProductRepository
+from db.repository.user_subscription import UserSubscriptionRepository
 from keyboards import (
     add_or_create_close_kb,
     create_remove_popular_kb,
     new_create_remove_and_edit_sale_kb,
+    create_go_to_subscription_kb,
 )
 
 from bot22 import bot
@@ -45,12 +47,13 @@ from utils.exc import (
     WbProductExistsError,
 )
 from utils.scheduler import (
-    new_check_subscription_limit,
     new_save_product,
     save_popular_product,
     try_add_product_price_to_db,
     update_last_send_price_by_user_product,
 )
+from utils.subscription import get_user_subscription_limit
+from logger import logger
 
 
 async def new_add_product_task(cxt, user_data: dict):
@@ -61,13 +64,39 @@ async def new_add_product_task(cxt, user_data: dict):
         msg: tuple = user_data.get("msg")
 
         async for session in get_session():
-            check_product_limit = await new_check_subscription_limit(
-                user_id=msg[0], marker=product_marker, session=session
-            )
-        if check_product_limit:
-            _text = f"⛔ Достигнут лимит {product_marker.upper()} товаров по Вашей подписке ⛔\n\nЛимит товаров: {check_product_limit}"
+            # check_product_limit = await new_check_subscription_limit(
+            #     user_id=msg[0], marker=product_marker, session=session
+            # )
+            try:
+                limits, used = await get_user_subscription_limit(msg[0], session)
+                limits_tuple_key = 0 if product_marker.lower() == "ozon" else 1
+            except Exception:
+                logger.error(
+                    "Can't check user %s subscription product limits",
+                    msg[0],
+                    exc_info=True,
+                )
+                await bot.edit_message_text(
+                    chat_id=msg[0],
+                    message_id=_add_msg_id,
+                    text=f"{product_marker.upper()} не удалось добавить",
+                )
+                return
+
+        if used[limits_tuple_key] >= limits[limits_tuple_key]:
+            _text = f"""
+*🚫 Достигнут лимит товаров*
+
+На бесплатной версии можно отслеживать только {limits[0]} товара с Ozon и {limits[1]} с WB.
+
+*🔓 Хотите больше? Оформите подписку и отслеживайте товары без ограничений👇*"""
+            kb = create_go_to_subscription_kb()
             msg = await bot.edit_message_text(
-                chat_id=msg[0], message_id=_add_msg_id, text=_text
+                chat_id=msg[0],
+                message_id=_add_msg_id,
+                text=_text,
+                reply_markup=kb.as_markup(resize_keyboard=True),
+                parse_mode="markdown",
             )
             await add_message_to_delete_dict(msg)
             return
@@ -1041,3 +1070,30 @@ async def add_punkt_by_user(cxt, punkt_data: dict):
             await bot.edit_message_text(
                 text=success_text, chat_id=settings_msg[0], message_id=settings_msg[-1]
             )
+
+
+async def notify_user_about_subscription_ending(ctx, user_id: int):
+    async for session in get_session():
+        async with session:
+            us_repo = UserSubscriptionRepository(session)
+            user_subscription = await us_repo.get_latest_subscription(user_id)
+            now = datetime.now(timezone.utc).date()
+            if not user_subscription or user_subscription.active_to != (
+                now + timedelta(days=4)
+            ):
+                logger.debug("No need to notify user")
+                return
+
+            text = """
+*⏳ Подписка заканчивается через 5 дней*
+
+Чтобы не потерять доступ к расширенным функциям — *продлите подписку заранее👇*"""
+            kb = create_go_to_subscription_kb()
+
+            try:
+                _ = await bot.send_message(
+                    user_id, text, reply_markup=kb.as_markup(), parse_mode="markdown"
+                )
+            except Exception:
+                logger.info("Chat %s is not active any more", user_id)
+                return

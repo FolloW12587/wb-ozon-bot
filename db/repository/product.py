@@ -9,7 +9,7 @@ class ProductRepository(BaseRepository[Product]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Product)
 
-    async def find_by_short_link(self, short_link) -> Product | None:
+    async def find_by_short_link(self, short_link: str) -> Product | None:
         result = await self.session.execute(
             select(self.model_class).where(Product.short_link == short_link)
         )

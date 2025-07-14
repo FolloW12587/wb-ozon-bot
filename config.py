@@ -54,9 +54,6 @@ _db_url = URL.create(
     database=DB_NAME,
 )
 
-# # Client Bot API
-# API_ID = os.environ.get('API_ID')
-# API_HASH = os.environ.get('API_HASH')
 
 DUMP_CHAT = os.getenv("DUMP_CHAT")
 ADMIN_IDS = os.getenv("ADMIN_IDS", "")
@@ -100,3 +97,6 @@ IMAGES_CONFIG_PATH = os.path.join(DATA_DIR, "images.json")
 # Yoomoney
 YOOMONEY_RECEIVER = os.environ.get("YOOMONEY_RECEIVER")
 YOOMONEY_NOTIFICATION_SECRET = os.environ.get("YOOMONEY_NOTIFICATION_SECRET")
+
+
+SUPPORT_BOT_URL = "https://t.me/NaSkidku_support"
