@@ -36,5 +36,6 @@ async def get_user_subscription_limit(
     for marker in ["wb", "ozon"]:
         products[marker] = await repo.get_marker_products(user_id, marker)
     return (subscription.ozon_product_limit, subscription.wb_product_limit), (
-        len(products["ozon"], products["wb"])
+        len(products["ozon"]),
+        len(products["wb"]),
     )

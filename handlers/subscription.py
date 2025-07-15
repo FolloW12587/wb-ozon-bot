@@ -180,6 +180,9 @@ async def get_subscription_handler(
             except Exception:
                 pass
 
+        if isinstance(message, types.CallbackQuery):
+            await message.answer()
+
 
 async def delete_main_messages(state: FSMContext, bot: Bot):
     data = await state.get_data()

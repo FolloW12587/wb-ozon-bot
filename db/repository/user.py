@@ -31,3 +31,10 @@ class UserRepository(BaseRepository[User]):
         )
 
         await self.session.commit()
+
+    async def get_active(self) -> list[User]:
+        db_models = await self.session.execute(
+            select(self.model_class).where(self.model_class.is_active.is_(True))
+        )
+
+        return db_models.scalars().all()

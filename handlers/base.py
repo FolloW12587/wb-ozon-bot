@@ -511,51 +511,29 @@ async def __settings_punkt_handler(
     data = await state.get_data()
     settings_msg: tuple = data.get("settings_msg")
 
+    if not await block_free_access_punkt(user_id, session, state, bot):
+        return
+
     async with session as _session:
-        try:
-            subscription = await get_user_subscription_option(_session, user_id)
-        except Exception:
-            # Не получается получить подписку пользователя
-            logger.error("Error in getting subscription for user %s", user_id)
-            _kb = create_or_add_exit_btn()
-            await bot.edit_message_text(
-                text="Произошла ошибка, попробуйте еще раз или обратитесь в наше службу поддержки",
-                chat_id=user_id,
-                message_id=settings_msg[-1],
-                reply_markup=_kb.as_markup(),
-            )
-            return
+        # Если у пользователя платная подписка
+        city_punkt = await new_check_has_punkt(user_id=user_id, session=_session)
 
-        if subscription.name == "Free":
-            # Если у пользователя бесплатный план - ему доступна только Москва
-            _text = """**🚫 Выбор пункта выдачи доступен по подписке 🏙**
+        _kb = create_punkt_settings_block_kb(has_punkt=city_punkt)
+        _kb = create_or_add_exit_btn(_kb)
 
-В бесплатной версии цены показываются по Москве.
+    if not city_punkt:
+        city_punkt = "Москва (по умолчанию)"
 
-**🔓 С подпиской вы сможете настроить свой город и видеть актуальные цены для себя👇**"""
-            _kb = create_go_to_subscription_kb()
-            _kb = create_or_add_exit_btn(_kb)
-        else:
-            # Если у пользователя платная подписка
-            city_punkt = await new_check_has_punkt(user_id=user_id, session=_session)
+    _sub_text = f"Отслеживание цен по городу: {city_punkt}"
 
-            _kb = create_punkt_settings_block_kb(has_punkt=city_punkt)
-            _kb = create_or_add_exit_btn(_kb)
-
-            if not city_punkt:
-                city_punkt = "Москва (по умолчанию)"
-
-            _sub_text = f"Отслеживание цен по городу: {city_punkt}"
-
-            _text = (
-                f"⚙️Раздел настроек: Пункт выдачи⚙️\n\n{_sub_text}\n\nВыберите действие👇"
-            )
+    _text = f"⚙️Раздел настроек: Пункт выдачи⚙️\n\n{_sub_text}\n\nВыберите действие👇"
 
     await bot.edit_message_text(
         text=_text,
         chat_id=user_id,
         message_id=settings_msg[-1],
         reply_markup=_kb.as_markup(),
+        parse_mode="markdown",
     )
 
 
@@ -599,6 +577,53 @@ async def __settings_company_handler(state: FSMContext, user_id: int, bot: Bot):
     )
 
 
+async def block_free_access_punkt(
+    user_id: int, session: AsyncSession, state: FSMContext, bot: Bot
+) -> bool:
+    """Returns True if accessed"""
+    data = await state.get_data()
+
+    settings_msg: tuple = data.get("settings_msg")
+
+    async with session as _session:
+        try:
+            subscription = await get_user_subscription_option(_session, user_id)
+        except Exception:
+            # Не получается получить подписку пользователя
+            logger.error(
+                "Error in getting subscription for user %s", user_id, exc_info=True
+            )
+            _kb = create_or_add_exit_btn()
+            await bot.edit_message_text(
+                text="Произошла ошибка, попробуйте еще раз или обратитесь в наше службу поддержки",
+                chat_id=user_id,
+                message_id=settings_msg[-1],
+                reply_markup=_kb.as_markup(),
+            )
+            return
+
+        if subscription.name == "Free":
+            # Если у пользователя бесплатный план - ему доступна только Москва
+            _text = """*🚫 Выбор пункта выдачи доступен по подписке 🏙*
+
+В бесплатной версии цены показываются по Москве.
+
+*🔓 С подпиской вы сможете настроить свой город и видеть актуальные цены для себя👇*"""
+            _kb = create_go_to_subscription_kb()
+            _kb = create_or_add_exit_btn(_kb)
+
+            await bot.edit_message_text(
+                text=_text,
+                chat_id=user_id,
+                message_id=settings_msg[-1],
+                reply_markup=_kb.as_markup(),
+                parse_mode="markdown",
+            )
+            return False
+
+    return True
+
+
 @main_router.callback_query(F.data.startswith("punkt"))
 async def specific_punkt_block(
     callback: types.CallbackQuery,
@@ -609,12 +634,17 @@ async def specific_punkt_block(
     data = await state.get_data()
 
     settings_msg: tuple = data.get("settings_msg")
+    user_id = callback.from_user.id
+
+    if not await block_free_access_punkt(user_id, session, state, bot):
+        await callback.answer()
+        return
 
     callback_data = callback.data.split("_")
     punkt_action = callback_data[-1]
 
     punkt_data = {
-        "user_id": callback.from_user.id,
+        "user_id": user_id,
         "punkt_action": punkt_action,
         # 'punkt_marker': punkt_marker,
     }
@@ -648,9 +678,9 @@ async def specific_punkt_block(
             )
 
         case "delete":
-            # if callback.from_user.id in (int(DEV_ID), int(SUB_DEV_ID)):
+            # if user_id in (int(DEV_ID), int(SUB_DEV_ID)):
             query = delete(Punkt).where(
-                Punkt.user_id == callback.from_user.id,
+                Punkt.user_id == user_id,
             )
             # *на всякий случай
             _success_redirect = False
@@ -679,6 +709,7 @@ async def specific_punkt_block(
 async def add_punkt_proccess(
     message: types.Message | types.CallbackQuery,
     state: FSMContext,
+    session: AsyncSession,
     bot: Bot,
     scheduler: AsyncIOScheduler,
 ):
@@ -711,6 +742,10 @@ async def add_punkt_proccess(
         except Exception as ex:
             print(ex)
 
+        return
+
+    if not await block_free_access_punkt(message.from_user.id, session, state, bot):
+        await message.delete()
         return
 
     city = message.text.strip().lower()
@@ -1654,10 +1689,10 @@ async def view_graphic(
     user_id = callback.from_user.id
 
     message_id = callback.message.message_id
-
+    print(f"Message ID: {message_id}, Chat ID: {user_id}")
     callback_data = callback.data.split("_")
 
-    callback_marker, user_id, product_id = callback_data
+    callback_marker, _, product_id = callback_data
 
     is_background_message = callback_marker.endswith("bg")
 
@@ -1666,38 +1701,44 @@ async def view_graphic(
             subscription = await get_user_subscription_option(_session, user_id)
         except Exception:
             # Не получается получить подписку пользователя
-            logger.error("Error in getting subscription for user %s", user_id)
+            logger.error(
+                "Error in getting subscription for user %s", user_id, exc_info=True
+            )
             _kb = create_or_add_exit_btn()
-            await bot.edit_message_text(
-                text="Произошла ошибка, попробуйте еще раз или обратитесь в наше службу поддержки",
+            await bot.edit_message_caption(
+                caption="Произошла ошибка, попробуйте еще раз или обратитесь в наше службу поддержки",
                 chat_id=user_id,
                 message_id=message_id,
                 reply_markup=_kb.as_markup(),
             )
+            await callback.answer()
             return
 
     if subscription.name == "Free":
         # Если бесплатная подписка, то график цен недоступен
-        _text = """**🚫 График доступен по подписке 📉**
+        _text = """*🚫 График доступен по подписке 📉*
 
 История изменения цены товара доступна только для пользователей с активной подпиской.
 
-**🔓 Оформите подписку, чтобы смотреть график и видеть лучшие моменты для покупки👇**"""
+*🔓 Оформите подписку, чтобы смотреть график и видеть лучшие моменты для покупки👇*"""
         _kb = create_go_to_subscription_kb()
         _kb_back = create_back_to_product_btn(
             user_id=user_id,
             product_id=product_id,
             is_background_task=is_background_message,
         )
-        _kb = _kb.add(_kb_back.buttons)
+        for button in _kb_back.buttons:
+            _kb = _kb.row(button)
         _kb = create_or_add_exit_btn(_kb)
 
-        await bot.edit_message_text(
-            _text,
+        await bot.edit_message_caption(
+            caption=_text,
             chat_id=user_id,
             message_id=message_id,
             reply_markup=_kb.as_markup(),
+            parse_mode="markdown",
         )
+        await callback.answer()
         return
 
     default_value = "МОСКВА"
