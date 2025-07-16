@@ -1,28 +1,16 @@
-from sqlalchemy import insert
-
 from db.base import get_session, UTM
+from db.repository.utm import UTMRepository
 
 from schemas import UTMSchema
 
 
 async def add_utm_to_db(data: UTMSchema):
-    # print('1 ',data.__dict__)
-    _data = data.model_dump()
-    # print('2 ', _data)
-
-    query = (
-        insert(
-            UTM
-        )\
-        .values(**_data)
-    )
-
+    utm = UTM(**data.model_dump())
     async for session in get_session():
+        repo = UTMRepository(session)
         try:
-            await session.execute(query)
-            await session.commit()
+            repo.create(utm)
+            print("UTM ADDED SUCCESSFULLY")
         except Exception as ex:
             await session.rollback()
-            print('ADD UTM ERROR', ex)
-        else:
-            print('UTM ADDED SUCCESSFULLY')
+            print("ADD UTM ERROR", ex)

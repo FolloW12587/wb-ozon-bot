@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, and_, update
 from sqlalchemy.orm import selectinload
 
+from commands.subscription_mass_sending import subscription_is_about_to_end
 import config
 from db.base import (
     Category,
@@ -22,6 +23,8 @@ from db.base import (
 )
 
 from db.repository.popular_product import PopularProductRepository
+from db.repository.subscription import SubscriptionRepository
+from db.repository.user import UserRepository
 from db.repository.user_subscription import UserSubscriptionRepository
 from keyboards import (
     add_or_create_close_kb,
@@ -1072,28 +1075,37 @@ async def add_punkt_by_user(cxt, punkt_data: dict):
             )
 
 
-async def notify_user_about_subscription_ending(ctx, user_id: int):
+async def notify_users_about_subscription_ending(ctx):
+    logger.info("Started notify users about subscription ending")
     async for session in get_session():
-        async with session:
-            us_repo = UserSubscriptionRepository(session)
-            user_subscription = await us_repo.get_latest_subscription(user_id)
-            now = datetime.now(timezone.utc).date()
-            if not user_subscription or user_subscription.active_to != (
-                now + timedelta(days=4)
-            ):
-                logger.debug("No need to notify user")
-                return
+        repo = UserRepository(session)
 
-            text = """
-*⏳ Подписка заканчивается через 5 дней*
+        for days in [5, 1]:
+            logger.info("Searching for users which subscription ends in %s days", days)
+            users_to_notify = await repo.get_users_which_subscription_ends(days)
+            if not users_to_notify:
+                logger.info("No one to notify")
+                continue
 
-Чтобы не потерять доступ к расширенным функциям — *продлите подписку заранее👇*"""
-            kb = create_go_to_subscription_kb()
+            logger.info("Found %s users to notify", len(users_to_notify))
 
-            try:
-                _ = await bot.send_message(
-                    user_id, text, reply_markup=kb.as_markup(), parse_mode="markdown"
-                )
-            except Exception:
-                logger.info("Chat %s is not active any more", user_id)
-                return
+            user_ids = [user.tg_id for user in users_to_notify]
+            await subscription_is_about_to_end(user_ids, session, days)
+
+
+async def search_users_for_ended_subscription(ctx):
+    logger.info("Started searching users for ended subscription")
+    async for session in get_session():
+        repo = UserRepository(session)
+        subscription_repo = SubscriptionRepository(session)
+
+        paid_subscriptions = await subscription_repo.get_paid_subscriptions()
+        if not paid_subscriptions:
+            logger.error("No paid subscriptinos in database. Aborting...")
+            return
+
+        paid_subscription_ids = [
+            paid_subscription.id for paid_subscription in paid_subscriptions
+        ]
+        users = await repo.get_users_with_ended_subscription(paid_subscription_ids)
+        # TODO: end subscription for user

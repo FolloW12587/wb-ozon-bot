@@ -12,36 +12,29 @@ import pytz
 
 import plotly.graph_objects as go
 
-from aiogram import types, Bot
+from aiogram import types
 from aiogram.fsm.context import FSMContext
 
 from sqlalchemy import update, select, and_, insert, Subquery, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
 from bot22 import bot
 
 from db.base import (
     Punkt,
-    Subscription,
     User,
-    WbProduct,
-    WbPunkt,
-    OzonProduct,
-    UserJob,
-    UTM,
     ProductCityGraphic,
     ProductPrice,
     Product,
     UserProduct,
 )
+from db.repository.subscription import SubscriptionRepository
+from db.repository.user import UserRepository
+from db.repository.utm import UTMRepository
 from utils.pics import ImageManager
 
 from utils.exc import NotEnoughGraphicData
 from utils.scheduler import (
-    push_check_ozon_price,
-    push_check_wb_price,
     add_task_to_delete_old_message_for_users,
 )
 
@@ -351,283 +344,57 @@ async def generate_graphic(
                 print("add error", ex)
 
 
-async def save_data_to_storage(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    bot: Bot,
-    scheduler: AsyncIOScheduler,
-    callback_data: str,
-):
-    data = await state.get_data()
-
-    async with session as session:
-        match callback_data:
-            case "wb_punkt":
-                list_punkt: list = data.get("list_punkt", list())
-
-                lat = data.get("lat")
-                lon = data.get("lon")
-                del_zone = data.get("del_zone")
-
-                _data = {
-                    "lat": float(lat),
-                    "lon": float(lon),
-                    "zone": del_zone,
-                    "user_id": callback.from_user.id,
-                    "time_create": datetime.now(),
-                }
-
-                query = insert(WbPunkt).values(**_data)
-
-                await session.execute(query)
-
-                try:
-                    await session.commit()
-                    _text = "Wb пукнт успешно добавлен"
-                except Exception:
-                    await session.rollback()
-                    _text = "Wb пукнт не удалось добавить"
-
-                if lat and lon:
-                    list_punkt.append([lat, lon])
-                    await state.update_data(list_punkt=list_punkt)
-
-            case "ozon_product":
-                _data = {
-                    "link": data.get("ozon_link"),
-                    "short_link": data.get("ozon_short_link"),
-                    "actual_price": data.get("ozon_actual_price"),
-                    "start_price": data.get("ozon_start_price"),
-                    "basic_price": data.get("ozon_basic_price"),
-                    "sale": int(data.get("sale")),
-                    "name": data.get("ozon_product_name"),
-                    "time_create": datetime.now(),
-                    "user_id": callback.from_user.id,
-                }
-
-                ozon_product = OzonProduct(**_data)
-
-                session.add(ozon_product)
-
-                await session.flush()
-
-                ozon_product_id = ozon_product.id
-
-                #          user_id | marker | product_id
-                job_id = f"{callback.from_user.id}.ozon.{ozon_product_id}"
-
-                job = scheduler.add_job(
-                    push_check_ozon_price,
-                    trigger="interval",
-                    minutes=15,
-                    id=job_id,
-                    jobstore="sqlalchemy",
-                    coalesce=True,
-                    kwargs={
-                        "user_id": callback.from_user.id,
-                        "product_id": ozon_product_id,
-                    },
-                )
-
-                _data = {
-                    "user_id": callback.from_user.id,
-                    "product_id": ozon_product_id,
-                    "product_marker": "ozon_product",
-                    "job_id": job.id,
-                }
-
-                user_job = UserJob(**_data)
-
-                session.add(user_job)
-
-                try:
-                    await session.commit()
-                    _text = "Ozon товар успешно добавлен"
-                except Exception as ex:
-                    print(ex)
-                    await session.rollback()
-                    _text = "Ozon товар не был добавлен"
-                pass
-            case "wb_product":
-
-                async with session.begin():
-                    query = (
-                        select(WbPunkt.id, WbPunkt.zone)
-                        .join(User, WbPunkt.user_id == User.tg_id)
-                        .where(User.tg_id == callback.from_user.id)
-                    )
-
-                    _wb_punkt_id = await session.execute(query)
-
-                    _wb_punkt_id = _wb_punkt_id.fetchall()
-
-                    print("short_link", data.get("wb_product_id"))
-
-                    if _wb_punkt_id:
-                        _wb_punkt_id, zone = _wb_punkt_id[0]
-                        _data = {
-                            "link": data.get("wb_product_link"),
-                            "short_link": data.get("wb_product_id"),
-                            "start_price": data.get("wb_start_price"),
-                            "actual_price": data.get("wb_product_price"),
-                            "sale": float(data.get("sale")),
-                            "name": data.get("wb_product_name"),
-                            "time_create": datetime.now(),
-                            "user_id": callback.from_user.id,
-                            "wb_punkt_id": _wb_punkt_id,
-                        }
-
-                        wb_product = WbProduct(**_data)
-
-                        session.add(wb_product)
-
-                        await session.flush()
-
-                        wb_product_id = wb_product.id
-
-                        print("product_id", wb_product_id)
-
-                        job_id = f"{callback.from_user.id}.wb.{wb_product_id}"
-
-                        job = scheduler.add_job(
-                            push_check_wb_price,
-                            trigger="interval",
-                            minutes=15,
-                            id=job_id,
-                            coalesce=True,
-                            jobstore="sqlalchemy",
-                            kwargs={
-                                "user_id": callback.from_user.id,
-                                "product_id": wb_product_id,
-                            },
-                        )
-
-                        _data = {
-                            "user_id": callback.from_user.id,
-                            "product_id": wb_product_id,
-                            "product_marker": "wb_product",
-                            "job_id": job.id,
-                        }
-
-                        user_job = UserJob(**_data)
-
-                        session.add(user_job)
-
-                        try:
-                            await session.commit()
-                        except Exception as ex:
-                            print(ex)
-                            _text = "Что то пошло не так"
-                        else:
-                            _text = "Wb товар успешно добавлен"
-                    else:
-                        _text = "Что то пошло не так"
-
-    return _text
-
-
 async def add_user(
     message: types.Message, session: AsyncSession, utm_source: str | None
 ):
-    free_subscribtion_query = select(Subscription.id).where(Subscription.name == "Free")
+    user_repo = UserRepository(session)
+    subscription_repo = SubscriptionRepository(session)
+    free_subscription = await subscription_repo.get_subscription_by_name("Free")
 
-    async with session as _session:
-        res = await _session.execute(free_subscribtion_query)
+    if not free_subscription:
+        return False
 
-    free_subscribtion_id = res.scalar_one_or_none()
+    user = User(
+        tg_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+        last_name=message.from_user.last_name,
+        time_create=datetime.now(),
+        subscription_id=free_subscription.id,
+        utm_source=utm_source,
+    )
+    user = await user_repo.create(user)
 
-    if free_subscribtion_id:
+    await add_task_to_delete_old_message_for_users(user_id=message.from_user.id)
+    print("user added")
 
-        data = {
-            "tg_id": message.from_user.id,
-            "username": message.from_user.username,
-            "first_name": message.from_user.first_name,
-            "last_name": message.from_user.last_name,
-            "time_create": datetime.now(),
-            "subscription_id": free_subscribtion_id,
-            "utm_source": utm_source,
-        }
+    if not utm_source or utm_source.startswith("direct"):
+        return True
 
-        query = insert(User).values(**data)
-        async with session as _session:
-            try:
-                await _session.execute(query)
-                await _session.commit()
-            except Exception as ex:
-                print(ex)
-                await _session.rollback()
-            else:
-                await add_task_to_delete_old_message_for_users(
-                    user_id=message.from_user.id
-                )
-                print("user added")
+    utm_repo = UTMRepository(session)
+    utms = await utm_repo.get_by_keitaro_id(utm_source)
 
-                if utm_source is not None and not utm_source.startswith("direct"):
-                    utm_query = select(
-                        UTM.id,
-                        UTM.client_id,
-                    ).where(UTM.keitaro_id == utm_source)
-                    res = await _session.execute(utm_query)
-                    utm_from_db = res.fetchall()
+    if not utms:
+        return True
 
-                    if utm_from_db:
-                        utm_id, client_id = utm_from_db[0]
-
-                        update_utm_query = (
-                            update(UTM)
-                            .values(user_id=message.from_user.id)
-                            .where(UTM.id == utm_id)
-                        )
-                        await _session.execute(update_utm_query)
-                        try:
-                            await _session.commit()
-                        except Exception as ex:
-                            print("ERROR WITH UPDATE UTM BY USER", ex)
-                        else:
-                            # send csv to yandex API
-                            await send_data_to_yandex_metica(
-                                client_id, goal_id="bot_start"
-                            )
-                            # pass
-                return True
-    else:
-        pass
+    utm = utms[0]
+    await utm_repo.update(utm.id, user_id=message.from_user.id)
+    # send csv to yandex API
+    await send_data_to_yandex_metica(utm.client_id, goal_id="bot_start")
+    return True
 
 
 async def check_user(
     message: types.Message, session: AsyncSession, utm_source: str | None
 ):
     async with session as _session:
-        query = select(User).where(User.tg_id == message.from_user.id)
+        repo = UserRepository(_session)
+        user = await repo.find_by_id(message.from_user.id)
+        if user:
+            repo.update(user.tg_id, is_active=True)
+            return True
 
-        res = await _session.execute(query)
-
-        res = res.scalar_one_or_none()
-
-    if res:
-        return True
-    else:
-        return await add_user(message, session, utm_source)
-
-
-async def check_has_punkt(user_id: int, session: AsyncSession):
-    wb_punkt_model = WbPunkt
-    # ozon_punkt_model = OzonPunkt
-
-    query = (
-        # exists()\
-        select(
-            wb_punkt_model.city,
-        ).where(wb_punkt_model.user_id == user_id)
-    )
-
-    res = await session.execute(query)
-
-    city_punkt = res.scalar_one_or_none()
-
-    # return bool(has_punkt)
-    return city_punkt
+        return await add_user(message, _session, utm_source)
 
 
 async def new_check_has_punkt(user_id: int, session: AsyncSession):

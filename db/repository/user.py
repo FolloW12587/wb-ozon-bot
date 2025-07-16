@@ -1,8 +1,9 @@
-from sqlalchemy import select, update
+from datetime import date, timedelta
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repository.base import BaseRepository
-from db.base import User
+from db.base import User, UserSubscription
 
 
 class UserRepository(BaseRepository[User]):
@@ -38,3 +39,68 @@ class UserRepository(BaseRepository[User]):
         )
 
         return db_models.scalars().all()
+
+    async def set_as_inactive(self, user_ids: list[int]):
+        stmt = (
+            update(self.model_class)
+            .values(is_active=False)
+            .where(self.model_class.tg_id.in_(user_ids))
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
+
+    async def get_users_which_subscription_ends(self, n: int) -> list[User]:
+        """Получаем пользователей, чья подписка заканчивается через `n` дней"""
+        today = date.today()
+        # Если подписка заканчивается через n дней, то она длится до n-1 дней
+        target_date = today + timedelta(days=n - 1)
+
+        # Подзапрос: максимальная дата окончания среди будущих или текущих подписок
+        subq = (
+            select(
+                UserSubscription.user_id,
+                func.max(UserSubscription.active_to).label("latest_active_to"),
+            )
+            .where(UserSubscription.active_to >= today)
+            .group_by(UserSubscription.user_id)
+            .subquery()
+        )
+
+        # Основной запрос: активные пользователи, у которых подписка заканчивается через `n` дней
+        stmt = (
+            select(self.model_class)
+            .join(subq, self.model_class.tg_id == subq.c.user_id)
+            .where(
+                self.model_class.is_active.is_(True),
+                subq.c.latest_active_to == target_date,
+            )
+        )
+
+        results = await self.session.execute(stmt)
+        return results.scalars().all()
+
+    async def get_users_with_ended_subscription(
+        self, paid_subscription_ids: list[int]
+    ) -> list[User]:
+        today = date.today()
+
+        subq = (
+            select(
+                UserSubscription.user_id,
+                func.max(UserSubscription.active_to).label("latest_active_to"),
+            )
+            .group_by(UserSubscription.user_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(User)
+            .join(subq, User.tg_id == subq.c.user_id)
+            .where(
+                User.subscription_id.in_(paid_subscription_ids),
+                subq.c.latest_active_to < today,
+            )
+        )
+
+        results = await self.session.execute(stmt)
+        return results.scalars().all()

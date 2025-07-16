@@ -10,7 +10,6 @@ from utils.exc import Forbidden
 async def get_user_subscription_option(
     session: AsyncSession, user_id: int
 ) -> Subscription:
-    # us_repo = UserSubscriptionRepository(session)
     user_repo = UserRepository(session)
     user = await user_repo.find_by_id(user_id)
     if not user:
