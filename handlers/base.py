@@ -512,7 +512,8 @@ async def __settings_punkt_handler(
     settings_msg: tuple = data.get("settings_msg")
 
     if not await block_free_access_punkt(user_id, session, state, bot):
-        return
+        # return
+        pass
 
     async with session as _session:
         # Если у пользователя платная подписка
@@ -603,22 +604,36 @@ async def block_free_access_punkt(
             return
 
         if subscription.name == "Free":
-            # Если у пользователя бесплатный план - ему доступна только Москва
-            _text = """*🚫 Выбор пункта выдачи доступен по подписке 🏙*
+            #             # Если у пользователя бесплатный план - ему доступна только Москва
+            #             _text = """*🚫 Выбор пункта выдачи доступен по подписке 🏙*
 
-В бесплатной версии цены показываются по Москве.
+            # В бесплатной версии цены показываются по Москве.
+
+            # *🔓 С подпиской вы сможете настроить свой город и видеть актуальные цены для себя👇*"""
+            #             _kb = create_go_to_subscription_kb()
+            #             _kb = create_or_add_exit_btn(_kb)
+
+            #             await bot.edit_message_text(
+            #                 text=_text,
+            #                 chat_id=user_id,
+            #                 message_id=settings_msg[-1],
+            #                 reply_markup=_kb.as_markup(),
+            #                 parse_mode="markdown",
+            #             )
+            _text = """*🚫 Выбор пункта выдачи скоро станет доступен только по подписке 🏙*
+
+В бесплатной версии цены будут показываться по Москве.
 
 *🔓 С подпиской вы сможете настроить свой город и видеть актуальные цены для себя👇*"""
             _kb = create_go_to_subscription_kb()
-            _kb = create_or_add_exit_btn(_kb)
 
-            await bot.edit_message_text(
+            message = await bot.send_message(
                 text=_text,
                 chat_id=user_id,
-                message_id=settings_msg[-1],
                 reply_markup=_kb.as_markup(),
                 parse_mode="markdown",
             )
+            await add_message_to_delete_dict(message, state)
             return False
 
     return True
@@ -637,8 +652,9 @@ async def specific_punkt_block(
     user_id = callback.from_user.id
 
     if not await block_free_access_punkt(user_id, session, state, bot):
-        await callback.answer()
-        return
+        # await callback.answer()
+        # return
+        pass
 
     callback_data = callback.data.split("_")
     punkt_action = callback_data[-1]
@@ -745,8 +761,9 @@ async def add_punkt_proccess(
         return
 
     if not await block_free_access_punkt(message.from_user.id, session, state, bot):
-        await message.delete()
-        return
+        # await message.delete()
+        # return
+        pass
 
     city = message.text.strip().lower()
 
@@ -1716,30 +1733,44 @@ async def view_graphic(
 
     if subscription.name == "Free":
         # Если бесплатная подписка, то график цен недоступен
-        _text = """*🚫 График доступен по подписке 📉*
+        #         _text = """*🚫 График доступен по подписке 📉*
 
-История изменения цены товара доступна только для пользователей с активной подпиской.
+        # История изменения цены товара доступна только для пользователей с активной подпиской.
+
+        # *🔓 Оформите подписку, чтобы смотреть график и видеть лучшие моменты для покупки👇*"""
+        #         _kb = create_go_to_subscription_kb()
+        #         _kb_back = create_back_to_product_btn(
+        #             user_id=user_id,
+        #             product_id=product_id,
+        #             is_background_task=is_background_message,
+        #         )
+        #         for button in _kb_back.buttons:
+        #             _kb = _kb.row(button)
+        #         _kb = create_or_add_exit_btn(_kb)
+
+        #         await bot.edit_message_caption(
+        #             caption=_text,
+        #             chat_id=user_id,
+        #             message_id=message_id,
+        #             reply_markup=_kb.as_markup(),
+        #             parse_mode="markdown",
+        #         )
+        #         await callback.answer()
+        # return
+        _text = """*🚫 График скоро станет доступен только по подписке 📉*
+
+История изменения цены товара будет доступна только для пользователей с активной подпиской.
 
 *🔓 Оформите подписку, чтобы смотреть график и видеть лучшие моменты для покупки👇*"""
         _kb = create_go_to_subscription_kb()
-        _kb_back = create_back_to_product_btn(
-            user_id=user_id,
-            product_id=product_id,
-            is_background_task=is_background_message,
-        )
-        for button in _kb_back.buttons:
-            _kb = _kb.row(button)
-        _kb = create_or_add_exit_btn(_kb)
 
-        await bot.edit_message_caption(
-            caption=_text,
+        message = await bot.send_message(
             chat_id=user_id,
-            message_id=message_id,
+            text=_text,
             reply_markup=_kb.as_markup(),
             parse_mode="markdown",
         )
-        await callback.answer()
-        return
+        await add_message_to_delete_dict(message, state)
 
     default_value = "МОСКВА"
 

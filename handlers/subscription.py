@@ -20,7 +20,7 @@ from payments.yoomoney import get_yoomoney_service
 
 import config
 
-# from logger import logger
+from logger import logger
 
 router = Router()
 
@@ -178,10 +178,16 @@ async def get_subscription_handler(
             try:
                 await message.delete()
             except Exception:
-                pass
+                logger.error("Can't delete message", exc_info=True)
 
         if isinstance(message, types.CallbackQuery):
             await message.answer()
+            try:
+                await bot.delete_message(
+                    chat_id=message.from_user.id, message_id=message.message.message_id
+                )
+            except Exception:
+                logger.error("Can't delete message", exc_info=True)
 
 
 async def delete_main_messages(state: FSMContext, bot: Bot):

@@ -4,6 +4,7 @@ import os
 from pydantic import BaseModel, RootModel, Field
 
 import config
+from custom_types import Markup
 
 
 class UTMSchema(BaseModel):
@@ -61,7 +62,6 @@ class ImageConfig(BaseModel):
     start_pic: str = ""
     faq_pic_dict: FAQPicDict = FAQPicDict({})
 
-
     @classmethod
     def load(cls) -> "ImageConfig":
         path = config.IMAGES_CONFIG_PATH
@@ -80,3 +80,8 @@ class ImageConfig(BaseModel):
         path = config.IMAGES_CONFIG_PATH
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self.model_dump(), f, indent=2)
+
+
+class MessageInfo(BaseModel):
+    text: str
+    markup: Markup | None = None

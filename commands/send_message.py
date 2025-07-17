@@ -1,26 +1,17 @@
 from asyncio import sleep
-from typing import Union
-from aiogram.types import (
-    InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    ForceReply,
-)
 
 # import config
 from bot22 import bot
 from logger import logger
 
-Markup = Union[
-    InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply, None
-]
+from schemas import MessageInfo
 
 
-async def send_message(chat_id: int, text: str, markup: Markup = None) -> int:
+async def send_message(chat_id: int, message: MessageInfo) -> int:
     msg = await bot.send_message(
         chat_id=chat_id,
-        text=text,
-        reply_markup=markup,
+        text=message.text,
+        reply_markup=message.markup,
         parse_mode="markdown",
     )
     return msg.message_id
@@ -31,16 +22,18 @@ async def pin_message(chat_id: int, message_id: int) -> bool:
 
 
 async def mass_sending_message(
-    chat_ids: list[int], text: str, markup: Markup = None
+    chat_ids: list[int], messages: list[MessageInfo]
 ) -> list[bool]:
     """Рассылка сообщения пользователям.
     Возвращает список булевых значений, показывающих успешность отправки сообщения"""
     output = []
     for chat_id in chat_ids:
         try:
-            await send_message(chat_id, text, markup)
+            for message in messages:
+                await send_message(chat_id, message)
+                await sleep(0.05)
+
             output.append(True)
-            await sleep(0.05)
         except Exception:
             logger.info(
                 "Error in sending message to %s. Possibly due to inactivity", chat_id

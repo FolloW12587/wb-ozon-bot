@@ -75,36 +75,37 @@ async def add_message_to_delete_dict(message: types.Message, state: FSMContext =
         dict_msg_on_delete[message_id] = (chat_id, message_date)
 
         await state.update_data(dict_msg_on_delete=dict_msg_on_delete)
-    else:
-        try:
-            user_id = message.chat.id
-            key = f"fsm:{user_id}:{user_id}:data"
+        return
 
-            async with redis_client.pipeline(transaction=True) as pipe:
-                user_data: bytes = await pipe.get(key)
-                results = await pipe.execute()
-                # Извлекаем результат из выполненного pipeline
-            # print('RESULTS', results)
-            # print('USER DATA (BYTES)', user_data)
+    try:
+        user_id = message.chat.id
+        key = f"fsm:{user_id}:{user_id}:data"
 
-            json_user_data: dict = json.loads(results[0])
-            # print('USER DATA', json_user_data)
+        async with redis_client.pipeline(transaction=True) as pipe:
+            user_data: bytes = await pipe.get(key)
+            results = await pipe.execute()
+            # Извлекаем результат из выполненного pipeline
+        # print('RESULTS', results)
+        # print('USER DATA (BYTES)', user_data)
 
-            dict_msg_on_delete: dict = json_user_data.get("dict_msg_on_delete")
+        json_user_data: dict = json.loads(results[0])
+        # print('USER DATA', json_user_data)
 
-            if not dict_msg_on_delete:
-                dict_msg_on_delete = dict()
+        dict_msg_on_delete: dict = json_user_data.get("dict_msg_on_delete")
 
-            dict_msg_on_delete[message_id] = (chat_id, message_date)
+        if not dict_msg_on_delete:
+            dict_msg_on_delete = dict()
 
-            json_user_data["dict_msg_on_delete"] = dict_msg_on_delete
+        dict_msg_on_delete[message_id] = (chat_id, message_date)
 
-            async with redis_client.pipeline(transaction=True) as pipe:
-                bytes_data = json.dumps(json_user_data)
-                await pipe.set(key, bytes_data)
-                results = await pipe.execute()
-        except Exception as ex:
-            print("ERROR WITH TRY ADD SCHEDULER MESSAGE TO REDIS STORE", ex)
+        json_user_data["dict_msg_on_delete"] = dict_msg_on_delete
+
+        async with redis_client.pipeline(transaction=True) as pipe:
+            bytes_data = json.dumps(json_user_data)
+            await pipe.set(key, bytes_data)
+            results = await pipe.execute()
+    except Exception as ex:
+        print("ERROR WITH TRY ADD SCHEDULER MESSAGE TO REDIS STORE", ex)
 
 
 async def send_data_to_yandex_metica(client_id: str, goal_id: str):

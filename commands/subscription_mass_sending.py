@@ -3,10 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.repository.user import UserRepository
 from db.base import get_session
 
-from commands.send_message import mass_sending_message
+from commands.send_message import mass_sending_message, send_message
 from keyboards import create_reply_start_kb, create_go_to_subscription_kb
 
+import config
 from logger import logger
+from schemas import MessageInfo
 
 
 async def subscription_mass_sending():
@@ -37,13 +39,27 @@ async def subscription_mass_sending():
 
 Спасибо, что вы с нами! ❤️"""
         kb = create_reply_start_kb()
+        message1 = MessageInfo(text=text, markup=kb.as_markup(resize_keyboard=True))
+
+        text2 = """Чтобы не потерять доступ к расширенным функциям — *оформите подписку заранее👇*"""
+        kb2 = create_go_to_subscription_kb()
+        message2 = MessageInfo(text=text2, markup=kb2.as_markup())
 
         logger.info("Sending...")
-        results = await mass_sending_message(
-            active_user_ids, text, kb.as_markup(resize_keyboard=True)
-        )
+        results = await mass_sending_message(active_user_ids, [message1, message2])
 
-        await set_users_as_inactive(active_user_ids, results, session)
+        logger.info("Finished sending")
+        set_as_inactive = await set_users_as_inactive(active_user_ids, results, session)
+
+    await send_message(
+        config.PAYMENTS_CHAT_ID,
+        MessageInfo(
+            text=(
+                f"Рассылка закончена. Пользователей найдено: {len(active_user_ids)}. "
+                f"Из них {len(set_as_inactive)} неактивных"
+            )
+        ),
+    )
 
 
 async def subscription_is_about_to_end(
@@ -60,13 +76,15 @@ async def subscription_is_about_to_end(
 Чтобы не потерять доступ к расширенным функциям — *продлите подписку заранее👇*"""
     kb = create_go_to_subscription_kb()
 
-    results = await mass_sending_message(user_ids, text, kb.as_markup())
+    results = await mass_sending_message(
+        user_ids, [MessageInfo(text=text, markup=kb.as_markup())]
+    )
     await set_users_as_inactive(user_ids, results, session)
 
 
 async def set_users_as_inactive(
     user_ids: list[int], activity_labels: list[bool], session: AsyncSession
-):
+) -> int:
     logger.info("Started set users as inactive function")
 
     inactive_users = []
@@ -76,10 +94,12 @@ async def set_users_as_inactive(
 
     if not inactive_users:
         logger.info("No inactive users")
-        return
+        return 0
 
     logger.info("Found %s inactive users out of %s", len(inactive_users), len(user_ids))
     async with session:
         repo = UserRepository(session)
         logger.info("Updating...")
         await repo.set_as_inactive(inactive_users)
+
+    return len(inactive_users)

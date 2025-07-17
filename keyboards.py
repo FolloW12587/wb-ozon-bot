@@ -381,8 +381,9 @@ def create_reply_start_kb():
 
     # _kb.add(types.KeyboardButton(text='Добавить товар'))
     _kb.add(types.KeyboardButton(text="Посмотреть товары"))
-    _kb.add(types.KeyboardButton(text="Настройки"))
+    # _kb.add(types.KeyboardButton(text="Подписка"))
     _kb.add(types.KeyboardButton(text="Подписка"))
+    _kb.row(types.KeyboardButton(text="Настройки"), width=1)
 
     return _kb
 

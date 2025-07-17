@@ -16,6 +16,7 @@ import config
 
 
 from logger import logger
+from schemas import MessageInfo
 
 
 async def process_transaction(cxt, transaction_id: int):
@@ -31,7 +32,7 @@ async def process_transaction(cxt, transaction_id: int):
 async def __transaction_process_failed(transaction_id: int):
     await send_message(
         config.PAYMENTS_CHAT_ID,
-        f"Ошибка при обработке транзакции {transaction_id}",
+        MessageInfo(text=f"Ошибка при обработке транзакции {transaction_id}"),
     )
     async for session in get_session():
         transaction_repo = TransactionRepository(session)
@@ -159,7 +160,7 @@ _Мы заранее напомним вам за 5 дней до окончан
 
 Приятных покупок и выгодных скидок! 💸"""
     try:
-        await send_message(user_id, text)
+        await send_message(user_id, MessageInfo(text=text))
     except Exception:
         logger.error("Error in notifying user about new sdubscription", exc_info=True)
         raise
@@ -176,7 +177,7 @@ async def notify_user_about_fail(user_id: int):
 
     markup = types.InlineKeyboardMarkup(inline_keyboard=[[btn]])
     try:
-        await send_message(user_id, text, markup)
+        await send_message(user_id, MessageInfo(text=text, markup=markup))
     except Exception:
         logger.error(
             "Error in notifying user abput failed transaction processing", exc_info=True

@@ -6,6 +6,7 @@ from db.base import get_session
 from db.repository.order import OrderRepository
 from db.repository.transaction import TransactionRepository
 from payments.process import notify_user_about_fail
+from schemas import MessageInfo
 from services.yoomoney.yoomoney_service import YoomoneyService
 from background.base import get_redis_background_pool, _redis_pool
 
@@ -24,7 +25,10 @@ async def yoomoney_payment_notification_handler(data: dict, service: YoomoneySer
         raise
 
     logger.info("Successfully processed and created transaction %s", transaction.id)
-    await send_message(config.PAYMENTS_CHAT_ID, "Новый платежное уведомление из юмани")
+    await send_message(
+        config.PAYMENTS_CHAT_ID,
+        MessageInfo(text="Новый платежное уведомление из юмани"),
+    )
 
     if not _redis_pool:
         _redis_pool = await get_redis_background_pool()
@@ -49,7 +53,7 @@ def get_yoomoney_service(session: AsyncSession) -> YoomoneyService:
 async def __yoomoney_payment_notificaiton_handler_failed(data: dict):
     await send_message(
         config.PAYMENTS_CHAT_ID,
-        "Ошибка при обработке платежного уведомления из юмани",
+        MessageInfo(text="Ошибка при обработке платежного уведомления из юмани"),
     )
     order_id = data.get("label")
     if not order_id:
