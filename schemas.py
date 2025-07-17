@@ -85,3 +85,4 @@ class ImageConfig(BaseModel):
 class MessageInfo(BaseModel):
     text: str
     markup: Markup | None = None
+    photo_id: str | None = None

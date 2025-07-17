@@ -1,3 +1,4 @@
+import os
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repository.user import UserRepository
@@ -7,12 +8,25 @@ from commands.send_message import mass_sending_message, send_message
 from keyboards import create_reply_start_kb, create_go_to_subscription_kb
 
 import config
+
+from bot22 import bot
 from logger import logger
 from schemas import MessageInfo
+from utils.pics import ImageManager
 
 
 async def subscription_mass_sending():
     logger.info("Started subscription mass sending")
+    image_manager = ImageManager(bot)
+
+    photo_path = os.path.join(image_manager.images_dir, "subscription_mass_sending.jpg")
+    if not os.path.exists(photo_path):
+        logger.error("File not exists %s", photo_path)
+        return
+
+    photo_id = await image_manager.generate_photo_id_for_file(photo_path)
+    logger.info("Photo id is %s", photo_id)
+
     async for session in get_session():
         repo = UserRepository(session)
         active_users = await repo.get_active()
@@ -39,7 +53,9 @@ async def subscription_mass_sending():
 
 Спасибо, что вы с нами! ❤️"""
         kb = create_reply_start_kb()
-        message1 = MessageInfo(text=text, markup=kb.as_markup(resize_keyboard=True))
+        message1 = MessageInfo(
+            text=text, markup=kb.as_markup(resize_keyboard=True), photo_id=photo_id
+        )
 
         text2 = """Чтобы не потерять доступ к расширенным функциям — *оформите подписку заранее👇*"""
         kb2 = create_go_to_subscription_kb()
@@ -49,14 +65,16 @@ async def subscription_mass_sending():
         results = await mass_sending_message(active_user_ids, [message1, message2])
 
         logger.info("Finished sending")
-        set_as_inactive = await set_users_as_inactive(active_user_ids, results, session)
+        num_set_as_inactive = await set_users_as_inactive(
+            active_user_ids, results, session
+        )
 
     await send_message(
         config.PAYMENTS_CHAT_ID,
         MessageInfo(
             text=(
                 f"Рассылка закончена. Пользователей найдено: {len(active_user_ids)}. "
-                f"Из них {len(set_as_inactive)} неактивных"
+                f"Из них {num_set_as_inactive} неактивных"
             )
         ),
     )
