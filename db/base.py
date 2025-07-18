@@ -51,7 +51,7 @@ class UserSubscription(Base):
     __tablename__ = "user_subscriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.tg_id"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users.tg_id"), nullable=False)
     order_id = Column(UUID, ForeignKey("orders.id"), nullable=True)
     subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
     active_from = Column(Date, nullable=False)
