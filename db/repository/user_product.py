@@ -16,6 +16,14 @@ class UserProductRepository(BaseRepository[UserProduct]):
 
         return result.scalars().all()
 
+    async def get_user_product(self, user_id: int, link: str) -> UserProduct | None:
+        stmt = select(self.model_class).where(
+            self.model_class.user_id == user_id, self.model_class.link == link
+        )
+        result = await self.session.execute(stmt)
+
+        return result.scalar_one_or_none()
+
     async def get_marker_products(self, user_id: int, marker: str) -> list[UserProduct]:
         stmt = (
             select(UserProduct)
