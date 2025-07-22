@@ -121,3 +121,39 @@ async def set_users_as_inactive(
         await repo.set_as_inactive(inactive_users)
 
     return len(inactive_users)
+
+
+async def notify_users_that_subscription_ended(
+    user_ids: list[int], subscription_price: int, session: AsyncSession
+):
+    text = f"""*⚠️ Ваши цены пересчитаны по Москве ⚠️*
+
+Подписка не была оформлена, поэтому:
+
+— Пункт выдачи сброшен на *Москву*
+— Все цены и скидки теперь рассчитываются по московскому региону
+
+*🔓 Хотите вернуть свой город и другие функции?*
+
+Оформите подписку — это откроет:
+
+• Безлимитное добавление товаров
+• Выбор пункта выдачи
+• График цен
+
+📦 Подписка стоит всего *{subscription_price} ₽ в месяц*"""
+    kb = create_go_to_subscription_kb()
+    results = await mass_sending_message(
+        user_ids, [MessageInfo(text=text, markup=kb.as_markup())]
+    )
+    inactive_num = await set_users_as_inactive(user_ids, results, session)
+
+    await send_message(
+        config.PAYMENTS_CHAT_ID,
+        MessageInfo(
+            text=(
+                f"У {len(user_ids)} пользователей закончилась подписка. "
+                f"Из них {inactive_num} неактивных."
+            )
+        ),
+    )

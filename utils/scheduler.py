@@ -8,9 +8,10 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, and_, text, update, func, desc
@@ -57,6 +58,7 @@ from utils.any import (
 from utils.exc import OzonProductExistsError, WbProductExistsError
 
 from config import JOB_STORE_URL
+from logger import logger
 
 
 # Настройка хранилища задач
@@ -1093,6 +1095,21 @@ async def sync_popular_product_jobs(scheduler: AsyncIOScheduler):
                 kwargs={"_queue_name": "arq:popular"},  # _queue_name
                 jobstore="sqlalchemy",
             )
+
+
+async def setup_subscription_end_job(scheduler: AsyncIOScheduler):
+    logger.info("Setup subscription_end job")
+
+    scheduler.add_job(
+        func=background_task_wrapper,
+        trigger=CronTrigger(hour=1, minute=0, second=0),
+        id="subscription_end",
+        coalesce=True,
+        args=("search_users_for_ended_subscription",),
+        kwargs={"_queue_name": "arq:low"},  # _queue_name
+        jobstore="sqlalchemy",
+        replace_existing=True,
+    )
 
 
 async def try_add_product_price_to_db(product_id: int, city: str | None, price: float):

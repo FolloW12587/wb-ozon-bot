@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, and_, update
 from sqlalchemy.orm import selectinload
 
-from commands.subscription_mass_sending import subscription_is_about_to_end
+from commands.subscription_mass_sending import (
+    notify_users_that_subscription_ended,
+    subscription_is_about_to_end,
+)
 import config
 from db.base import (
     Category,
@@ -979,9 +982,17 @@ async def search_users_for_ended_subscription(ctx):
             paid_subscription.id for paid_subscription in paid_subscriptions
         ]
         users = await repo.get_users_with_ended_subscription(paid_subscription_ids)
+        if not users:
+            logger.info("No users with ended subscription")
+            return
 
         for user in users:
             await drop_users_subscription(user, free_subscription, session)
+
+        user_ids = [user.tg_id for user in users]
+        await notify_users_that_subscription_ended(
+            user_ids, paid_subscriptions[0].price_rub, session
+        )
 
 
 async def drop_users_subscription(
@@ -1010,8 +1021,7 @@ async def drop_users_subscription(
             for product in products[marker_limit:]:
                 await up_repo.delete(product)
 
-    await drop_users_punkt(user.tg_id, session)
-    # TODO: notify user about his subscriptions is being dropped
+    await drop_users_punkt(user, session)
 
 
 async def drop_users_punkt(user: User, session: AsyncSession):
