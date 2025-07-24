@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repository.base import BaseRepository
@@ -31,6 +31,12 @@ class UserRepository(BaseRepository[User]):
             .values(**kwargs)
         )
 
+        await self.session.commit()
+
+    async def delete_by_id(self, model_id: int):
+        await self.session.execute(
+            delete(self.model_class).where(self.model_class.tg_id == model_id)
+        )
         await self.session.commit()
 
     async def get_active(self) -> list[User]:
@@ -100,6 +106,14 @@ class UserRepository(BaseRepository[User]):
                 User.subscription_id.in_(paid_subscription_ids),
                 subq.c.latest_active_to < today,
             )
+        )
+
+        results = await self.session.execute(stmt)
+        return results.scalars().all()
+
+    async def get_users_using_subscription(self, subscription_id: int) -> list[User]:
+        stmt = select(self.model_class).where(
+            self.model_class.subscription_id == subscription_id
         )
 
         results = await self.session.execute(stmt)

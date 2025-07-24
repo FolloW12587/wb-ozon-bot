@@ -126,6 +126,9 @@ async def set_users_as_inactive(
 async def notify_users_that_subscription_ended(
     user_ids: list[int], subscription_price: int, session: AsyncSession
 ):
+    image_manager = ImageManager(bot)
+    photo_id = await image_manager.get_subscription_ended_photo_id()
+
     text = f"""*⚠️ Ваши цены пересчитаны по Москве ⚠️*
 
 Подписка не была оформлена, поэтому:
@@ -144,7 +147,7 @@ async def notify_users_that_subscription_ended(
 📦 Подписка стоит всего *{subscription_price} ₽ в месяц*"""
     kb = create_go_to_subscription_kb()
     results = await mass_sending_message(
-        user_ids, [MessageInfo(text=text, markup=kb.as_markup())]
+        user_ids, [MessageInfo(text=text, markup=kb.as_markup(), photo_id=photo_id)]
     )
     inactive_num = await set_users_as_inactive(user_ids, results, session)
 

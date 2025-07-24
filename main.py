@@ -94,7 +94,7 @@ async def on_startup():
     )
 
     asyncio.create_task(sync_popular_product_jobs(scheduler))
-    # asyncio.create_task(setup_subscription_end_job(scheduler))
+    asyncio.create_task(setup_subscription_end_job(scheduler))
 
 
 @app.on_event("shutdown")

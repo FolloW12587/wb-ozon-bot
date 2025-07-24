@@ -1,7 +1,7 @@
 from typing import Generic, Type, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -45,6 +45,12 @@ class BaseRepository(Generic[M]):
 
     async def delete(self, db_model: M):
         await self.session.delete(db_model)
+        await self.session.commit()
+
+    async def delete_by_id(self, model_id: int | UUID):
+        await self.session.execute(
+            delete(self.model_class).where(self.model_class.id == model_id)
+        )
         await self.session.commit()
 
     async def list_all(self) -> list[M]:

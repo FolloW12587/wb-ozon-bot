@@ -60,6 +60,7 @@ class ImageConfig(BaseModel):
     default_product_photo: str = ""
     default_product_list_photo: str = ""
     start_pic: str = ""
+    subscription_ended_photo: str = ""
     faq_pic_dict: FAQPicDict = FAQPicDict({})
 
     @classmethod

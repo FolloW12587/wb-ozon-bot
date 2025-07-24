@@ -2,7 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 
-from background.base import redis_settings
+from background.base import _redis_pool, get_redis_background_pool, redis_settings
 from background.tasks import (
     new_push_check_ozon_price,
     new_push_check_wb_price,
@@ -15,12 +15,16 @@ from config import JOB_STORE_URL
 
 
 async def startup(ctx):
+    global _redis_pool
     jobstores = {
         "sqlalchemy": SQLAlchemyJobStore(url=JOB_STORE_URL),
     }
 
     scheduler = AsyncIOScheduler(jobstores=jobstores)
+    if not _redis_pool:
+        _redis_pool = await get_redis_background_pool()
 
+    scheduler.start()
     ctx["scheduler"] = scheduler
     print("Worker is starting up...")
 

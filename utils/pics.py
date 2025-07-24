@@ -55,6 +55,19 @@ class ImageManager:
         self.save()
         return photo_id
 
+    async def get_subscription_ended_photo_id(self) -> str | None:
+        if self.config.subscription_ended_photo:
+            return self.config.subscription_ended_photo
+
+        path = os.path.join(self.images_dir, "subscription_mass_sending.jpg")
+        if not os.path.exists(path):
+            return None
+
+        photo_id = await self.generate_photo_id_for_file(path)
+        self.config.subscription_ended_photo = photo_id
+        self.save()
+        return photo_id
+
     async def get_faq_photo_ids(self, question: FAQQuestion) -> list[str]:
         photo_ids = self.config.faq_pic_dict.get(question)
         if photo_ids:
@@ -87,7 +100,9 @@ class ImageManager:
 
     def _get_question_images(self, question: str) -> list[str]:
         """Собирает локальные пути по шаблону question_n.jpg"""
-        pattern = re.compile(rf"{re.escape(question)}_(\d+)\.(?:jpe?g|png)", re.IGNORECASE)
+        pattern = re.compile(
+            rf"{re.escape(question)}_(\d+)\.(?:jpe?g|png)", re.IGNORECASE
+        )
         files = []
 
         for fname in os.listdir(self.images_dir):
