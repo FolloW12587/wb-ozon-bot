@@ -987,7 +987,7 @@ async def new_delete_callback(
 
     print("JOB ID", job_id)
 
-    async with session.begin():
+    async with session:
         upj_repo = UserProductJobRepository(session)
         up_repo = UserProductRepository(session)
 

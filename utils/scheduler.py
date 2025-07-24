@@ -1033,7 +1033,7 @@ async def send_fake_price(
 # для планировании задачи в APScheduler и выполнения в ARQ worker`e
 async def background_task_wrapper(func_name, *args, _queue_name):
 
-    _redis_pool = get_redis_pool()
+    _redis_pool = await get_redis_background_pool()
 
     _args_str = ".".join([f"{arg}" for arg in args])
 
@@ -1102,7 +1102,7 @@ async def setup_subscription_end_job(scheduler: AsyncIOScheduler):
 
     scheduler.add_job(
         func=background_task_wrapper,
-        trigger=CronTrigger(hour=1, minute=0, second=0),
+        trigger=CronTrigger(hour=9, minute=0, second=0),
         id="subscription_end",
         coalesce=True,
         args=("search_users_for_ended_subscription",),
