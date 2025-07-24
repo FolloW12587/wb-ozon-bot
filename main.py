@@ -17,6 +17,7 @@ from utils.storage import storage
 from utils.scheduler import (
     scheduler,
     send_fake_price,
+    setup_subscription_end_job,
     sync_popular_product_jobs,
 )
 from utils.utm import add_utm_to_db
@@ -93,6 +94,7 @@ async def on_startup():
     )
 
     asyncio.create_task(sync_popular_product_jobs(scheduler))
+    asyncio.create_task(setup_subscription_end_job(scheduler))
 
 
 @app.on_event("shutdown")

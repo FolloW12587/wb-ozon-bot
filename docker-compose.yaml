@@ -65,8 +65,11 @@ services:
       - POSTGRES_HOST=psql_db
       # - DB_PORT=5432
       - REDIS_HOST=redis_tg_bot_db
+      - LOG_DIR=/var/log/arq_low
     networks:
       - bot_network
+    volumes:
+      - ./logs/arq_low:/var/log/arq_low
     command: arq background.low_worker.WorkerSettings
     depends_on:
       - redis_tg_bot_db
@@ -79,8 +82,11 @@ services:
       - POSTGRES_HOST=psql_db
       # - DB_PORT=5432
       - REDIS_HOST=redis_tg_bot_db
+      - LOG_DIR=/var/log/arq_popular
     networks:
       - bot_network
+    volumes:
+      - ./logs/arq_popular:/var/log/arq_popular
     command: arq background.popular_worker.WorkerSettings
     depends_on:
       - redis_tg_bot_db

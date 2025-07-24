@@ -8,14 +8,17 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert, select, and_, text, update, func, desc
 
 import config
+from background.base import get_redis_background_pool, _redis_pool, get_redis_pool
+
 from db.base import (
     Category,
     ChannelLink,
@@ -30,11 +33,10 @@ from db.base import (
     UserProductJob,
     ProductPrice,
 )
-
-from background.base import get_redis_background_pool, _redis_pool, get_redis_pool
-
 from db.repository.product import ProductRepository
 from db.repository.popular_product_sale_range import PopularProductSaleRangeRepository
+from db.repository.punkt import PunktRepository
+from db.repository.user_product import UserProductRepository
 from keyboards import (
     add_or_create_close_kb,
     new_create_remove_and_edit_sale_kb,
@@ -42,7 +44,7 @@ from keyboards import (
 
 from bot22 import bot
 
-from services.ozon_api_service import OzonAPIService
+from services.ozon.ozon_api_service import OzonAPIService
 from services.wb_api_service import WbAPIService
 from utils.pics import ImageManager
 from utils.storage import redis_client
@@ -50,13 +52,13 @@ from utils.any import (
     generate_pretty_amount,
     generate_sale_for_price,
     add_message_to_delete_dict,
-    # generate_sale_for_price_popular_product,
     send_data_to_yandex_metica,
 )
 
 from utils.exc import OzonProductExistsError, WbProductExistsError
 
 from config import JOB_STORE_URL
+from logger import logger
 
 
 # Настройка хранилища задач
@@ -70,11 +72,7 @@ scheduler = AsyncIOScheduler(jobstores=jobstores)
 
 timezone = pytz.timezone("Europe/Moscow")
 
-# scheduler_cron = CronTrigger(minute=1,
-#                              timezone=timezone)
-
 scheduler_cron = IntervalTrigger(minutes=15, timezone=timezone)
-
 
 scheduler_interval = IntervalTrigger(hours=1, timezone=timezone)
 image_manager = ImageManager(bot)
@@ -128,11 +126,8 @@ async def periodic_delete_old_message(user_id: int):
         user_data: bytes = await pipe.get(key)
         results = await pipe.execute()
         # Извлекаем результат из выполненного pipeline
-    # print('RESULTS', results)
-    # print('USER DATA (BYTES)', user_data)
 
     json_user_data: dict = json.loads(results[0])
-    # print('USER DATA', json_user_data)
 
     dict_msg_on_delete: dict = json_user_data.get("dict_msg_on_delete")
     if not dict_msg_on_delete:
@@ -156,7 +151,6 @@ async def periodic_delete_old_message(user_id: int):
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=_key)
                 await asyncio.sleep(0.1)
-                # await bot.delete_messages() # что будет если какое то сообщение не сможет удалиться и произойдет ошибка ???
             except Exception as ex:
                 del dict_msg_on_delete[_key]
                 print(ex)
@@ -188,8 +182,6 @@ async def new_check_product_by_user_in_db(
 async def new_check_subscription_limit(
     user_id: int, marker: Literal["wb", "ozon"], session: AsyncSession
 ):
-    # product_model = OzonProduct if marker == 'ozon' else WbProduct
-    # print(marker)
     marker = marker.lower()
 
     if marker == "wb":
@@ -230,32 +222,6 @@ async def new_check_subscription_limit(
 
         if product_count >= subscription_limit:
             return subscription_limit
-
-
-# async def update_sale_for_popular_products():
-#     query = select(
-#         PopularProduct,
-#     )
-
-#     async for session in get_session():
-#         async with session as _session:
-#             res = await _session.execute(query)
-
-#             popular_products = res.scalars().all()
-
-#             for popular_product in popular_products:
-#                 start_price = popular_product.start_price
-#                 popular_product.sale = await generate_sale_for_price_popular_product(
-#                     session,
-#                     start_price
-#                 )
-
-#             try:
-#                 await _session.commit()
-#                 print("UDPATE POPULAR PRODUCTS SUCCESSFULLY")
-#             except Exception:
-#                 await _session.rollback()
-#                 print("UDPATE POPULAR PRODUCTS WITH ERROR")
 
 
 async def add_product_to_db_popular_product(
@@ -444,11 +410,7 @@ async def add_product_to_db(
 
     user_product_id = user_product.id
 
-    #          user_id | marker | product_id
     job_id = f"{user_id}:{marker}:{user_product_id}"
-    # job_id = 'test_job_id'
-
-    # if user_id == int(DEV_ID):
 
     if marker == "wb":
         func_name = "new_push_check_wb_price"
@@ -469,20 +431,6 @@ async def add_product_to_db(
         ),
         kwargs={"_queue_name": "arq:low"},
     )
-    # else:
-    #     if marker == 'wb':
-    #         scheduler_func = new_push_check_wb_price
-    #     else:
-    #         scheduler_func = new_push_check_ozon_price
-
-    #     job = scheduler.add_job(scheduler_func,
-    #                             trigger='interval',
-    #                             minutes=15,
-    #                             id=job_id,
-    #                             jobstore='sqlalchemy',
-    #                             coalesce=True,
-    #                             kwargs={'user_id': user_id,
-    #                                     'product_id': user_product_id})
 
     _data = {
         "user_product_id": user_product_id,
@@ -542,55 +490,34 @@ async def add_product_to_db(
 async def try_update_ozon_product_photo(
     product_id: int, short_link: str, session: AsyncSession
 ):
-    photo_id = None
     try:
         api_service = OzonAPIService()
         text_data = await api_service.get_product_data(short_link)
-
-        photo_url_pattern = r'images\\":\[{\\"src\\":\\"https:\/\/cdn1\.ozone\.ru\/s3\/multimedia-[a-z0-9]*(-\w*)?(\/*[a-z0-9]*\/*)?\/\d+\.jpg'
-
-        match = re.search(photo_url_pattern, text_data)
-
-        if match:
-            # print('search',match.group())
-            photo_url_match = re.search(r"https.*\.jpg?", match.group())
-            if photo_url_match:
-                photo_url = photo_url_match.group()
-
-                photo_id = await image_manager.generate_photo_id_for_url(photo_url)
-    except Exception as ex:
-        print(ex)
-    finally:
-        if not photo_id:
+        product_data = api_service.parse_product_data(text_data)
+        if product_data.photo_url:
+            photo_id = await image_manager.generate_photo_id_for_url(
+                url=product_data.photo_url
+            )
+        else:
             photo_id = await image_manager.get_default_product_photo_id()
+    except Exception:
+        photo_id = await image_manager.get_default_product_photo_id()
 
     repo = ProductRepository(session)
     repo.update(product_id, photo_id=photo_id)
 
 
-async def try_get_ozon_product_photo(
-    short_link: str, text_data: str, session: AsyncSession
-):
+async def get_product_photo_id(
+    short_link: str, photo_url: str | None, session: AsyncSession
+) -> str:
     repo = ProductRepository(session)
     product = await repo.find_by_short_link(short_link)
     if product:
         return product.photo_id
 
-    # photo_url_pattern = r'image\\":\\"https:\/\/cdn1\.ozone\.ru\/s3\/multimedia-\d+(-\w+)?\/\d+\.jpg'
+    if photo_url:
+        return await image_manager.generate_photo_id_for_url(url=photo_url)
 
-    photo_url_pattern = r'images\\":\[{\\"src\\":\\"https:\/\/cdn1\.ozone\.ru\/s3\/multimedia-[a-z0-9]*(-\w*)?\/\d+\.jpg'
-
-    match = re.search(photo_url_pattern, text_data)
-
-    if match:
-        # print('search',match.group())
-        photo_url_match = re.search(r"https.*\.jpg?", match.group())
-        if photo_url_match:
-            photo_url = photo_url_match.group()
-            # print('RESULT URL',photo_url)
-            return await image_manager.generate_photo_id_for_url(url=photo_url)
-    else:
-        print("URL не найден")
     return await image_manager.get_default_product_photo_id()
 
 
@@ -600,91 +527,26 @@ async def save_popular_ozon_product(
     link: str = product_data.get("link")
     name: str = product_data.get("name")
 
-    if link.startswith("https://ozon.ru/t/"):
-        _idx = link.find("/t/")
-        _prefix = "/t/"
-        ozon_short_link = "croppedLink|" + link[_idx + len(_prefix) :]
-        print(ozon_short_link)
-    else:
-        _prefix = "product/"
-        _idx = link.rfind("product/")
-        ozon_short_link = link[(_idx + len(_prefix)) :]
-
     api_service = OzonAPIService()
+    ozon_short_link = api_service.shorten_link(link)
     res = await api_service.get_product_data(ozon_short_link)
 
-    _new_short_link = res.split("|")[0]
-    print(_new_short_link)
+    data = api_service.parse_product_data(res)
 
-    response_data = res.split("|", maxsplit=1)[-1]
-
-    json_data: dict = json.loads(response_data)
-
-    photo_id = await try_get_ozon_product_photo(
-        short_link=_new_short_link, text_data=res, session=session
+    photo_id = await get_product_photo_id(
+        short_link=data.short_link, photo_url=data.photo_url, session=session
     )
 
-    if not photo_id:
-        photo_id = await image_manager.get_default_product_photo_id()
-
-    w = re.findall(r"\"cardPrice.*currency?", res)
-
-    if w:
-        w = w[0].split(",")[:3]
-
-        _d = {
-            "price": None,
-            "originalPrice": None,
-            "cardPrice": None,
-        }
-
-        for k in _d:
-            if not all(v for v in _d.values()):
-                for q in w:
-                    if q.find(k) != -1:
-                        _name, price = q.split(":")
-                        price = price.replace("\\", "").replace('"', "")
-                        price = float("".join(price.split()[:-1]))
-                        print(price)
-                        _d[k] = price
-                        break
-            else:
-                break
-
-        print(_d)
-        start_price = int(_d.get("cardPrice", 0))
-        actual_price = int(_d.get("cardPrice", 0))
-        basic_price = int(_d.get("price", 0))
-
-    else:
-        # try:
-        script_list = json_data.get("seo").get("script")
-
-        inner_html = script_list[0].get("innerHTML")  # .get('offers').get('price')
-
-        # try:
-        inner_html_json: dict = json.loads(inner_html)
-        offers = inner_html_json.get("offers")
-
-        _price = offers.get("price")
-
-        start_price = int(_price)
-        actual_price = int(_price)
-        basic_price = int(_price)
-
-        print("Price", _price)
-
-    # _sale = generate_sale_for_price(start_price)
-    _sale = await generate_sale_for_price_popular_product(session, start_price)  # new !
+    sale = await generate_sale_for_price_popular_product(session, data.start_price)
 
     _data = {
         "link": link,
-        "short_link": _new_short_link,
+        "short_link": data.short_link,
         "name": name,
-        "actual_price": actual_price,
-        "start_price": start_price,
-        "basic_price": basic_price,
-        "sale": _sale,
+        "actual_price": data.actual_price,
+        "start_price": data.start_price,
+        "basic_price": data.basic_price,
+        "sale": sale,
         "photo_id": photo_id,
         "product_marker": product_data.get("product_marker"),
         "high_category": product_data.get("high_category"),
@@ -772,130 +634,45 @@ async def save_ozon_product(
     session: AsyncSession,
     scheduler: AsyncIOScheduler,
 ):
-    if link.startswith("https://ozon.ru/t/"):
-        _idx = link.find("/t/")
-        _prefix = "/t/"
-        ozon_short_link = "croppedLink|" + link[_idx + len(_prefix) :]
-        print(ozon_short_link)
-    else:
-        _prefix = "product/"
-        _idx = link.rfind("product/")
-        ozon_short_link = link[(_idx + len(_prefix)) :]
+    api_service = OzonAPIService()
+    ozon_short_link = api_service.shorten_link(link)
 
-    query = select(
-        UserProduct.id,
-    ).where(
-        UserProduct.user_id == user_id,
-        UserProduct.link == link,
-    )
-    async with session as _session:
-        res = await _session.execute(query)
+    up_repo = UserProductRepository(session)
+    product = await up_repo.get_user_product(user_id, link)
 
-    res = res.scalar_one_or_none()
-
-    if res:
+    if product:
         raise OzonProductExistsError()
 
-    query = (
-        select(
-            Punkt.ozon_zone,
-        )
-        .join(User, Punkt.user_id == User.tg_id)
-        .where(User.tg_id == user_id)
-    )
-    async with session as _session:
-        res = await _session.execute(query)
-
-    del_zone = res.scalar_one_or_none()
+    punkt_repo = PunktRepository(session)
+    punkt = await punkt_repo.get_users_punkt(user_id)
+    del_zone = punkt.ozon_zone if punkt else None
 
     print("do request on OZON API (new version)")
 
-    api_service = OzonAPIService()
     res = await api_service.get_product_data(ozon_short_link, del_zone)
-
-    _new_short_link = res.split("|")[0]
-    print(_new_short_link)
+    data = api_service.parse_product_data(res)
 
     check_product_by_user = await new_check_product_by_user_in_db(
-        user_id=user_id, short_link=_new_short_link, session=session
+        user_id=user_id, short_link=data.short_link, session=session
     )
 
     if check_product_by_user:
         raise OzonProductExistsError()
 
-    response_data = res.split("|", maxsplit=1)[-1]
-
-    json_data: dict = json.loads(response_data)
-
-    photo_id = await try_get_ozon_product_photo(
-        short_link=_new_short_link, text_data=res, session=session
+    photo_id = await get_product_photo_id(
+        short_link=data.short_link, photo_url=data.photo_url, session=session
     )
 
-    if not photo_id:
-        photo_id = await image_manager.get_default_product_photo_id()
-        # print('Не удалось спарсить фото OZON товара')
-        # raise Exception()
-
-    w = re.findall(r"\"cardPrice.*currency?", res)
-
-    if w:
-        w = w[0].split(",")[:3]
-
-        _d = {
-            "price": None,
-            "originalPrice": None,
-            "cardPrice": None,
-        }
-
-        for k in _d:
-            if not all(v for v in _d.values()):
-                for q in w:
-                    if q.find(k) != -1:
-                        _name, price = q.split(":")
-                        price = price.replace("\\", "").replace('"', "")
-                        price = float("".join(price.split()[:-1]))
-                        print(price)
-                        _d[k] = price
-                        break
-            else:
-                break
-
-        print(_d)
-        start_price = int(_d.get("cardPrice", 0))
-        actual_price = int(_d.get("cardPrice", 0))
-        basic_price = int(_d.get("price", 0))
-
-    else:
-        script_list = json_data.get("seo").get("script")
-
-        inner_html = script_list[0].get("innerHTML")  # .get('offers').get('price')
-
-        inner_html_json: dict = json.loads(inner_html)
-        offers = inner_html_json.get("offers")
-
-        _price = offers.get("price")
-
-        start_price = int(_price)
-        actual_price = int(_price)
-        basic_price = int(_price)
-
-        print("Price", _price)
-
-    # if not name:
-    name = " ".join(json_data.get("seo").get("title").split()[:4])
-
-    print("NAMEEE FROM SEO", name)
-
-    _sale = generate_sale_for_price(start_price)
+    sale = generate_sale_for_price(data.start_price)
 
     _data = {
         "link": link,
-        "short_link": _new_short_link,
-        "name": name,
-        "actual_price": actual_price,
-        "start_price": start_price,
-        "basic_price": basic_price,
-        "sale": _sale,
+        "short_link": data.short_link,
+        "name": data.name,
+        "actual_price": data.actual_price,
+        "start_price": data.start_price,
+        "basic_price": data.basic_price,
+        "sale": sale,
         "user_id": user_id,
         "photo_id": photo_id,
     }
@@ -1256,7 +1033,7 @@ async def send_fake_price(
 # для планировании задачи в APScheduler и выполнения в ARQ worker`e
 async def background_task_wrapper(func_name, *args, _queue_name):
 
-    _redis_pool = get_redis_pool()
+    _redis_pool = await get_redis_background_pool()
 
     _args_str = ".".join([f"{arg}" for arg in args])
 
@@ -1320,6 +1097,21 @@ async def sync_popular_product_jobs(scheduler: AsyncIOScheduler):
             )
 
 
+async def setup_subscription_end_job(scheduler: AsyncIOScheduler):
+    logger.info("Setup subscription_end job")
+
+    scheduler.add_job(
+        func=background_task_wrapper,
+        trigger=CronTrigger(hour=9, minute=0, second=0),
+        id="subscription_end",
+        coalesce=True,
+        args=("search_users_for_ended_subscription",),
+        kwargs={"_queue_name": "arq:low"},  # _queue_name
+        jobstore="sqlalchemy",
+        replace_existing=True,
+    )
+
+
 async def try_add_product_price_to_db(product_id: int, city: str | None, price: float):
 
     city = city if city else "МОСКВА"
@@ -1373,18 +1165,7 @@ async def try_add_product_price_to_db(product_id: int, city: str | None, price: 
 async def update_last_send_price_by_user_product(
     last_send_price: float, user_product_id: int
 ):
-    update_query = (
-        update(UserProduct)
-        .values(last_send_price=last_send_price)
-        .where(
-            UserProduct.id == user_product_id,
-        )
-    )
     async for session in get_session():
         async with session as _session:
-            await _session.execute(update_query)
-            try:
-                await _session.commit()
-            except Exception as ex:
-                print("UPDATE LAST SEND PRICE ERROR", ex)
-                await _session.rollback()
+            repo = UserProductRepository(_session)
+            await repo.update(user_product_id, last_send_price=last_send_price)

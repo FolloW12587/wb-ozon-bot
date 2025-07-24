@@ -115,7 +115,10 @@ async def get_subscription_handler(
         subscriptions = await subscription_repo.get_paid_subscriptions()
         if not subscriptions:
             await bot.send_message(
-                text="На данный момент у нас предложений по подпискам для Вас! Пожалуйста, попробуйте позднее"
+                text=(
+                    "На данный момент у нас предложений по подпискам для Вас! "
+                    "Пожалуйста, попробуйте позднее"
+                )
             )
             return
 
@@ -127,8 +130,8 @@ async def get_subscription_handler(
         )
         service = get_yoomoney_service(session)
         now = datetime.now(timezone.utc).date()
-        has_active_subscription = (
-            user_subscription is not None and user_subscription.active_to >= now
+        has_active_subscription = user_subscription is not None and (
+            user_subscription.active_to is None or user_subscription.active_to >= now
         )
 
         if has_active_subscription:

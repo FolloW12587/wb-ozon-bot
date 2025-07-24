@@ -31,14 +31,23 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
 import config
+
+from db.base import (
+    PopularProduct,
+    ProductCityGraphic,
+    Punkt,
+    Product,
+    UserProduct,
+    UserProductJob,
+)
+from db.repository.user_product import UserProductRepository
+from db.repository.user_product_job import UserProductJobRepository
+
 from keyboards import (
     create_back_to_product_btn,
     create_go_to_subscription_kb,
     create_or_add_exit_faq_btn,
-    create_or_add_return_to_product_list_btn,
-    create_pagination_page_kb,
     create_or_add_cancel_btn,
-    create_remove_and_edit_sale_kb,
     create_reply_start_kb,
     create_settings_kb,
     create_punkt_settings_block_kb,
@@ -52,7 +61,7 @@ from keyboards import (
 )
 
 from schemas import FAQQuestion
-from states import EditSale, LocationState, NewEditSale, PunktState
+from states import LocationState, NewEditSale, PunktState
 
 from utils.exc import NotEnoughGraphicData
 
@@ -66,7 +75,6 @@ from utils.handlers import (
     check_user,
     new_check_has_punkt,
     new_show_product_list,
-    show_product_list,
     try_delete_faq_messages,
     try_delete_prev_list_msgs,
     state_clear,
@@ -82,19 +90,6 @@ from utils.cities import city_index_dict
 from utils.pics import ImageManager
 from utils.subscription import get_user_subscription_option
 
-from db.base import (
-    OzonProduct as OzonProductModel,
-    PopularProduct,
-    ProductCityGraphic,
-    Punkt,
-    User,
-    UserJob,
-    WbProduct,
-    Product,
-    UserProduct,
-    UserProductJob,
-)
-
 from logger import logger
 
 
@@ -105,7 +100,10 @@ moscow_tz = pytz.timezone("Europe/Moscow")
 
 SUB_START_TEXT = "🖐Здравствуйте, {}"
 
-START_TEXT = "С помощью этого бота вы сможете отследить изменение цены на понравившиеся товары в маркетплейсах Wildberries и Ozon."
+START_TEXT = (
+    "С помощью этого бота вы сможете отследить изменение цены "
+    "на понравившиеся товары в маркетплейсах Wildberries и Ozon."
+)
 
 
 @main_router.message(Command("start"))
@@ -512,8 +510,7 @@ async def __settings_punkt_handler(
     settings_msg: tuple = data.get("settings_msg")
 
     if not await block_free_access_punkt(user_id, session, state, bot):
-        # return
-        pass
+        return
 
     async with session as _session:
         # Если у пользователя платная подписка
@@ -604,36 +601,22 @@ async def block_free_access_punkt(
             return
 
         if subscription.name == "Free":
-            #             # Если у пользователя бесплатный план - ему доступна только Москва
-            #             _text = """*🚫 Выбор пункта выдачи доступен по подписке 🏙*
+            # Если у пользователя бесплатный план - ему доступна только Москва
+            _text = """*🚫 Выбор пункта выдачи доступен по подписке 🏙*
 
-            # В бесплатной версии цены показываются по Москве.
-
-            # *🔓 С подпиской вы сможете настроить свой город и видеть актуальные цены для себя👇*"""
-            #             _kb = create_go_to_subscription_kb()
-            #             _kb = create_or_add_exit_btn(_kb)
-
-            #             await bot.edit_message_text(
-            #                 text=_text,
-            #                 chat_id=user_id,
-            #                 message_id=settings_msg[-1],
-            #                 reply_markup=_kb.as_markup(),
-            #                 parse_mode="markdown",
-            #             )
-            _text = """*🚫 Выбор пункта выдачи скоро станет доступен только по подписке 🏙*
-
-В бесплатной версии цены будут показываться по Москве.
+В бесплатной версии цены показываются по Москве.
 
 *🔓 С подпиской вы сможете настроить свой город и видеть актуальные цены для себя👇*"""
             _kb = create_go_to_subscription_kb()
+            _kb = create_or_add_exit_btn(_kb)
 
-            message = await bot.send_message(
+            await bot.edit_message_text(
                 text=_text,
                 chat_id=user_id,
+                message_id=settings_msg[-1],
                 reply_markup=_kb.as_markup(),
                 parse_mode="markdown",
             )
-            await add_message_to_delete_dict(message, state)
             return False
 
     return True
@@ -652,9 +635,8 @@ async def specific_punkt_block(
     user_id = callback.from_user.id
 
     if not await block_free_access_punkt(user_id, session, state, bot):
-        # await callback.answer()
-        # return
-        pass
+        await callback.answer()
+        return
 
     callback_data = callback.data.split("_")
     punkt_action = callback_data[-1]
@@ -673,7 +655,12 @@ async def specific_punkt_block(
     match punkt_action:
         case "add":
             await state.set_state(PunktState.city)
-            _text = '🏙 Введите название города, в формате "Город", в котором хотите отслеживать цены.\n\n❗Если ваш город не находит, введите название ближайшего крупного населённого пункта.'
+            _text = (
+                '🏙 Введите название города, в формате "Город", '
+                "в котором хотите отслеживать цены.\n\n"
+                "❗Если ваш город не находит, введите название ближайшего "
+                "крупного населённого пункта."
+            )
 
             await bot.edit_message_text(
                 text=_text,
@@ -684,7 +671,12 @@ async def specific_punkt_block(
 
         case "edit":
             await state.set_state(PunktState.city)
-            _text = '🏙 Введите название <b>нового</b> города, в формате "Город", в котором хотите отслеживать цены.\n\n❗Если ваш город не находит, введите название ближайшего крупного населённого пункта.'
+            _text = (
+                '🏙 Введите название <b>нового</b> города, в формате "Город", '
+                "в котором хотите отслеживать цены.\n\n"
+                "❗Если ваш город не находит, введите название ближайшего "
+                "крупного населённого пункта."
+            )
 
             await bot.edit_message_text(
                 text=_text,
@@ -761,9 +753,8 @@ async def add_punkt_proccess(
         return
 
     if not await block_free_access_punkt(message.from_user.id, session, state, bot):
-        # await message.delete()
-        # return
-        pass
+        await message.delete()
+        return
 
     city = message.text.strip().lower()
 
@@ -772,7 +763,12 @@ async def add_punkt_proccess(
     city_index = city_index_dict.get(city)
 
     if not city_index:
-        _text = f'❌ Не удалось найти  - {message.text.strip()}\n\n<b><i>Пожалуйста, проверяйте корректность вводимого значения</i></b>\n\n🏙 Введите название города, в формате "Город", в котором хотите отслеживать цены.\n\n❗Если ваш город не находит, введите название ближайшего крупного населённого пункта.'
+        _text = (
+            f"❌ Не удалось найти  - {message.text.strip()}\n\n"
+            f"<b><i>Пожалуйста, проверяйте корректность вводимого значения</i></b>\n\n"
+            f'🏙 Введите название города, в формате "Город", в котором хотите отслеживать цены.\n\n'
+            f"❗Если ваш город не находит, введите название ближайшего крупного населённого пункта."
+        )
         await bot.edit_message_text(
             text=_text,
             chat_id=settings_msg[0],
@@ -798,7 +794,11 @@ async def add_punkt_proccess(
         }
     )
 
-    _text = "⏳ Добавление пункта выдачи...\n\n❗<b><i>Просим Вас не пытаться добавить новый пункт, пока не завершиться текущее добавление</i></b>"
+    _text = (
+        "⏳ Добавление пункта выдачи...\n\n"
+        "❗<b><i>Просим Вас не пытаться добавить новый пункт, "
+        "пока не завершиться текущее добавление</i></b>"
+    )
 
     await bot.edit_message_text(
         text=_text, chat_id=settings_msg[0], message_id=settings_msg[-1]
@@ -818,30 +818,6 @@ async def add_punkt_proccess(
     )
 
     await message.delete()
-
-
-@main_router.callback_query(F.data == "pagination_page")
-async def pagination_page(
-    callback: types.Message | types.CallbackQuery,
-    state: FSMContext,
-    bot: Bot,
-):
-    data = await state.get_data()
-
-    product_dict: dict = data.get("view_product_dict")
-
-    list_msg: tuple = product_dict.get("list_msg")
-
-    _kb = create_pagination_page_kb(product_dict)
-    _kb = create_or_add_return_to_product_list_btn(_kb)
-
-    await bot.edit_message_text(
-        chat_id=list_msg[0],
-        message_id=list_msg[-1],
-        text="Выберите страницу, на которую хотите перейти",
-        reply_markup=_kb.as_markup(),
-    )
-    await callback.answer()
 
 
 @main_router.callback_query(F.data == "new_pagination_page")
@@ -869,23 +845,6 @@ async def new_pagination_page(
     await callback.answer()
 
 
-@main_router.callback_query(F.data.startswith("go_to_page"))
-async def go_to_selected_page(
-    callback: types.Message | types.CallbackQuery,
-    state: FSMContext,
-):
-    data = await state.get_data()
-
-    selected_page = callback.data.split("_")[-1]
-
-    product_dict: dict = data.get("view_product_dict")
-
-    product_dict["current_page"] = int(selected_page)
-
-    await show_product_list(product_dict, callback.from_user.id, state)
-    await callback.answer()
-
-
 @main_router.callback_query(F.data.startswith("new_go_to_page"))
 async def new_go_to_selected_page(
     callback: types.Message | types.CallbackQuery,
@@ -900,30 +859,6 @@ async def new_go_to_selected_page(
     product_dict["current_page"] = int(selected_page)
 
     await new_show_product_list(product_dict, callback.from_user.id, state)
-    await callback.answer()
-
-
-@main_router.callback_query(F.data.startswith("page"))
-async def switch_page(
-    callback: types.Message | types.CallbackQuery,
-    state: FSMContext,
-):
-    callback_data = callback.data.split("_")[-1]
-
-    data = await state.get_data()
-
-    product_dict = data.get("view_product_dict")
-
-    if not product_dict:
-        await callback.answer(text="Ошибка", show_alert=True)
-        return
-
-    if callback_data == "next":
-        product_dict["current_page"] += 1
-    else:
-        product_dict["current_page"] -= 1
-
-    await show_product_list(product_dict, callback.from_user.id, state)
     await callback.answer()
 
 
@@ -1010,23 +945,6 @@ async def back_to_product(
     await callback.answer()
 
 
-@main_router.callback_query(F.data == "return_to_product_list")
-async def back_to_product_list(
-    callback: types.Message | types.CallbackQuery, state: FSMContext
-):
-    data = await state.get_data()
-
-    product_dict: dict = data.get("view_product_dict")
-
-    if product_dict:
-        await show_product_list(
-            product_dict=product_dict, user_id=callback.from_user.id, state=state
-        )
-        await callback.answer()
-    else:
-        await callback.answer(text="Что то пошло не так", show_alert=True)
-
-
 @main_router.callback_query(F.data == "new_return_to_product_list")
 async def new_back_to_product_list(
     callback: types.Message | types.CallbackQuery, state: FSMContext
@@ -1069,21 +987,13 @@ async def new_delete_callback(
 
     print("JOB ID", job_id)
 
-    query1 = delete(UserProductJob).where(
-        and_(
-            UserProductJob.job_id == job_id,
-            UserProductJob.user_product_id == int(product_id),
-        )
-    )
-    query2 = delete(UserProduct).where(
-        UserProduct.id == int(product_id),
-    )
+    async with session:
+        upj_repo = UserProductJobRepository(session)
+        up_repo = UserProductRepository(session)
 
-    async with session.begin():
-        await session.execute(query1)
-        await session.execute(query2)
         try:
-            await session.commit()
+            await upj_repo.delete_by_job_id(job_id)
+            await up_repo.delete_by_id(int(product_id))
 
             scheduler.remove_job(job_id=job_id, jobstore="sqlalchemy")
         except Exception as ex:
@@ -1092,289 +1002,53 @@ async def new_delete_callback(
         else:
             await callback.answer("Товар успешно удален", show_alert=True)
 
-        if with_redirect:
-            product_dict: dict = data.get("view_product_dict")
+    if not with_redirect:
+        try:
+            await callback.message.delete()
+        except Exception as ex:
+            print(ex)
+        return
 
-            pages: int = product_dict.get("pages")
-            current_page: int = product_dict.get("current_page")
-            product_list: list = product_dict.get("product_list")
-            ozon_product_count: int = product_dict.get("ozon_product_count")
-            wb_product_count: int = product_dict.get("wb_product_count")
-            list_msg: tuple = product_dict.get("list_msg")
+    product_dict: dict = data.get("view_product_dict")
 
-            for idx, product in enumerate(product_list):
-                # print(product)
-                # print(product[0], product_id)
-                # print(product[6], marker)
+    pages: int = product_dict.get("pages")
+    current_page: int = product_dict.get("current_page")
+    product_list: list = product_dict.get("product_list")
+    ozon_product_count: int = product_dict.get("ozon_product_count")
+    wb_product_count: int = product_dict.get("wb_product_count")
+    list_msg: tuple = product_dict.get("list_msg")
 
-                if product[0] == int(product_id) and product[6] == marker:
-                    del product_list[idx]
+    for idx, product in enumerate(product_list):
+        if product[0] == int(product_id) and product[6] == marker:
+            del product_list[idx]
 
-            if marker == "wb":
-                wb_product_count -= 1
-            else:
-                ozon_product_count -= 1
-
-            len_product_list = len(product_list)
-
-            pages = ceil(len_product_list / DEFAULT_PAGE_ELEMENT_COUNT)
-
-            if current_page > pages:
-                current_page -= 1
-
-            len_product_list = len(product_list)
-
-            view_product_dict = {
-                "len_product_list": len_product_list,
-                "pages": pages,
-                "current_page": current_page,
-                "product_list": product_list,
-                "ozon_product_count": ozon_product_count,
-                "wb_product_count": wb_product_count,
-                "list_msg": list_msg,
-            }
-
-            await state.update_data(view_product_dict=view_product_dict)
-
-            await new_back_to_product_list(callback, state)
-        else:
-            try:
-                await callback.message.delete()
-            except Exception as ex:
-                print(ex)
-
-
-@main_router.callback_query(F.data.startswith("delete"))
-async def delete_callback(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    scheduler: AsyncIOScheduler,
-):
-    with_redirect = True
-
-    data = await state.get_data()
-
-    _callback_data = callback.data.split("_")
-
-    callback_prefix = _callback_data[0]
-
-    if callback_prefix.endswith("rd"):
-        with_redirect = False
-
-    callback_data = _callback_data[1:]
-    marker, user_id, product_id, job_id = callback_data
-
-    match marker:
-        case "wb":
-            query1 = delete(UserJob).where(
-                and_(
-                    UserJob.user_id == int(user_id),
-                    UserJob.product_id == int(product_id),
-                )
-            )
-            query2 = delete(WbProduct).where(
-                and_(
-                    WbProduct.id == int(product_id),
-                )
-            )
-            async with session.begin():
-                await session.execute(query1)
-                await session.execute(query2)
-                try:
-                    await session.commit()
-
-                    scheduler.remove_job(job_id=job_id, jobstore="sqlalchemy")
-                except Exception as ex:
-                    print(ex)
-                    await session.rollback()
-                else:
-                    await callback.answer("Товар успешно удален", show_alert=True)
-
-            if with_redirect:
-                product_dict: dict = data.get("view_product_dict")
-
-                pages: int = product_dict.get("pages")
-                current_page: int = product_dict.get("current_page")
-                product_list: list = product_dict.get("product_list")
-                ozon_product_count: int = product_dict.get("ozon_product_count")
-                wb_product_count: int = product_dict.get("wb_product_count")
-                list_msg: tuple = product_dict.get("list_msg")
-
-                for idx, product in enumerate(product_list):
-                    print(product)
-                    print(product[0], product_id)
-                    print(product[6], marker)
-                    if product[0] == int(product_id) and product[6] == marker:
-                        del product_list[idx]
-
-                wb_product_count -= 1
-
-                len_product_list = len(product_list)
-
-                pages = ceil(len_product_list / DEFAULT_PAGE_ELEMENT_COUNT)
-
-                if current_page > pages:
-                    current_page -= 1
-
-                len_product_list = len(product_list)
-
-                view_product_dict = {
-                    "len_product_list": len_product_list,
-                    "pages": pages,
-                    "current_page": current_page,
-                    "product_list": product_list,
-                    "ozon_product_count": ozon_product_count,
-                    "wb_product_count": wb_product_count,
-                    "list_msg": list_msg,
-                }
-
-                await state.update_data(view_product_dict=view_product_dict)
-
-                await back_to_product_list(callback, state)
-            else:
-                try:
-                    await callback.message.delete()
-                except Exception as ex:
-                    print(ex)
-        case "ozon":
-            query1 = delete(UserJob).where(
-                and_(
-                    UserJob.user_id == int(user_id),
-                    UserJob.product_id == int(product_id),
-                )
-            )
-            query2 = delete(OzonProductModel).where(
-                and_(
-                    OzonProductModel.id == int(product_id),
-                )
-            )
-            async with session.begin():
-                await session.execute(query1)
-                await session.execute(query2)
-                try:
-                    await session.commit()
-
-                    scheduler.remove_job(job_id=job_id, jobstore="sqlalchemy")
-                except Exception as ex:
-                    print(ex)
-                    await session.rollback()
-                else:
-                    await callback.answer("Товар успешно удален", show_alert=True)
-
-            if with_redirect:
-                product_dict: dict = data.get("view_product_dict")
-
-                pages: int = product_dict.get("pages")
-                current_page: int = product_dict.get("current_page")
-                product_list: list = product_dict.get("product_list")
-                ozon_product_count: int = product_dict.get("ozon_product_count")
-                wb_product_count: int = product_dict.get("wb_product_count")
-                list_msg: tuple = product_dict.get("list_msg")
-
-                for idx, product in enumerate(product_list):
-                    if product[0] == int(product_id) and product[6] == marker:
-                        del product_list[idx]
-
-                ozon_product_count -= 1
-
-                len_product_list = len(product_list)
-
-                pages = ceil(len_product_list / DEFAULT_PAGE_ELEMENT_COUNT)
-
-                if current_page > pages:
-                    current_page -= 1
-
-                len_product_list = len(product_list)
-
-                view_product_dict = {
-                    "len_product_list": len_product_list,
-                    "pages": pages,
-                    "current_page": current_page,
-                    "product_list": product_list,
-                    "ozon_product_count": ozon_product_count,
-                    "wb_product_count": wb_product_count,
-                    "list_msg": list_msg,
-                }
-
-                await state.update_data(view_product_dict=view_product_dict)
-                await back_to_product_list(callback, state)
-            else:
-                try:
-                    await callback.message.delete()
-                except Exception as ex:
-                    print(ex)
-
-
-@main_router.callback_query(F.data.startswith("edit.sale"))
-async def edit_sale_callback(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    bot: Bot,
-):
-    data = await state.get_data()
-
-    callback_data = callback.data.split("_")
-    callback_prefix = callback_data[0]
-
-    marker, user_id, product_id = callback_data[1:]
-
-    with_redirect = True
-
-    if callback_prefix.endswith("rd"):
-        with_redirect = False
-
-    if with_redirect:
-        _sale_data: dict = data.get("sale_data")
-
-        link = _sale_data.get("link")
-        sale = _sale_data.get("sale")
-        start_price = _sale_data.get("start_price")
+    if marker == "wb":
+        wb_product_count -= 1
     else:
-        product_model = WbProduct if marker == "wb" else OzonProductModel
-        query = select(
-            product_model.link,
-            product_model.sale,
-            product_model.start_price,
-        ).where(
-            and_(
-                product_model.id == int(product_id),
-                product_model.user_id == callback.from_user.id,
-            )
-        )
-        async with session as _session:
-            res = await _session.execute(query)
+        ozon_product_count -= 1
 
-        _sale_data = res.fetchall()
-        link, sale, start_price = _sale_data[0]
+    len_product_list = len(product_list)
 
-    await state.update_data(
-        sale_data={
-            "user_id": user_id,
-            "product_id": product_id,
-            "marker": marker,
-            "link": link,
-            "sale": sale,
-            "start_price": start_price,
-            "with_redirect": with_redirect,
-        }
-    )
-    await state.set_state(EditSale.new_sale)
+    pages = ceil(len_product_list / DEFAULT_PAGE_ELEMENT_COUNT)
 
-    _kb = create_or_add_cancel_btn()
+    if current_page > pages:
+        current_page -= 1
 
-    msg = await bot.edit_message_text(
-        text=f'<b>Установленная скидка на Ваш {marker.upper()} <a href="{link}">товар</a> {sale}</b>\n\nУкажите новую скидку <b>как число</b> в следующем сообщении',
-        chat_id=callback.from_user.id,
-        message_id=callback.message.message_id,
-        reply_markup=_kb.as_markup(),
-    )
+    len_product_list = len(product_list)
 
-    await add_message_to_delete_dict(msg, state)
+    view_product_dict = {
+        "len_product_list": len_product_list,
+        "pages": pages,
+        "current_page": current_page,
+        "product_list": product_list,
+        "ozon_product_count": ozon_product_count,
+        "wb_product_count": wb_product_count,
+        "list_msg": list_msg,
+    }
 
-    await state.update_data(msg=(msg.chat.id, msg.message_id))
-    await callback.answer()
+    await state.update_data(view_product_dict=view_product_dict)
+
+    await new_back_to_product_list(callback, state)
 
 
 @main_router.callback_query(F.data.startswith("edit.new.sale"))
@@ -1403,22 +1077,12 @@ async def new_edit_sale_callback(
         sale = _sale_data.get("sale")
         start_price = _sale_data.get("start_price")
     else:
-        # product_model = WbProduct if marker == 'wb' else OzonProductModel
-        query = select(
-            UserProduct.link,
-            UserProduct.sale,
-            UserProduct.start_price,
-        ).where(
-            and_(
-                UserProduct.id == int(product_id),
-                UserProduct.user_id == callback.from_user.id,
-            )
-        )
-        async with session as _session:
-            res = await _session.execute(query)
+        up_repo = UserProductRepository(session)
+        product = await up_repo.find_by_id(int(product_id))
 
-        _sale_data = res.fetchall()
-        link, sale, start_price = _sale_data[0]
+        link = product.link
+        sale = product.sale
+        start_price = product.start_price
 
     await state.update_data(
         sale_data={
@@ -1436,7 +1100,11 @@ async def new_edit_sale_callback(
     _kb = create_or_add_cancel_btn()
 
     msg = await bot.edit_message_caption(
-        caption=f'<b>Установленная скидка на Ваш {marker.upper()} <a href="{link}">товар</a> {sale}</b>\n\nУкажите новую скидку <b>как число</b> в следующем сообщении',
+        caption=(
+            f"<b>Установленная скидка на Ваш {marker.upper()} "
+            f'<a href="{link}">товар</a> {sale}</b>\n\n'
+            "Укажите новую скидку <b>как число</b> в следующем сообщении"
+        ),
         chat_id=callback.from_user.id,
         message_id=callback.message.message_id,
         reply_markup=_kb.as_markup(),
@@ -1446,132 +1114,6 @@ async def new_edit_sale_callback(
 
     await state.update_data(msg=(msg.chat.id, msg.message_id))
     await callback.answer()
-
-
-@main_router.message(and_f(EditSale.new_sale), F.content_type == types.ContentType.TEXT)
-async def edit_sale_proccess(
-    message: types.Message | types.CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    bot: Bot,
-):
-    data = await state.get_data()
-
-    new_sale = message.text.strip()
-
-    await delete_prev_subactive_msg(data)
-
-    if not new_sale.isdigit():
-        sub_active_msg = await message.answer(
-            text=f"Невалидные данные\nОжидается число, передано: {new_sale}"
-        )
-
-        await add_message_to_delete_dict(sub_active_msg, state)
-
-        await state.update_data(
-            _add_msg=(sub_active_msg.chat.id, sub_active_msg.message_id)
-        )
-
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        return
-
-    product_dict: dict = data.get("view_product_dict")
-
-    msg: tuple = data.get("msg")
-
-    # print('edit_sale_msg', edit_sale_msg)
-
-    sale_data: dict = data.get("sale_data")
-
-    if not sale_data:
-        sub_active_msg = await message.answer("Ошибка")
-
-        await add_message_to_delete_dict(sub_active_msg, state)
-
-        await state.update_data(
-            _add_msg=(sub_active_msg.chat.id, sub_active_msg.message_id)
-        )
-
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        return
-
-    user_id = sale_data.get("user_id")
-    product_id = sale_data.get("product_id")
-    marker = sale_data.get("marker")
-    start_price = sale_data.get("start_price")
-    with_redirect = sale_data.get("with_redirect")
-
-    if start_price <= float(new_sale):
-        sub_active_msg = await message.answer(
-            text=f"Невалидные данные\nСкидка не может быть больше или равной цене товара\nПередано {new_sale}, Начальная цена товара: {start_price}"
-        )
-
-        await add_message_to_delete_dict(sub_active_msg, state)
-
-        await state.update_data(
-            _add_msg=(sub_active_msg.chat.id, sub_active_msg.message_id)
-        )
-
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        return
-
-    product_model = OzonProductModel if marker == "ozon" else WbProduct
-
-    query = (
-        update(product_model)
-        .values(sale=float(new_sale))
-        .where(
-            and_(
-                product_model.id == int(product_id),
-                product_model.user_id == int(user_id),
-            )
-        )
-    )
-
-    async with session as _session:
-        try:
-            await _session.execute(query)
-            await _session.commit()
-        except Exception as ex:
-            print(ex)
-            await session.rollback()
-            sub_active_msg = await message.answer("Не удалось обновить скидку")
-        else:
-            sub_active_msg = await message.answer("Скидка обновлена")
-
-    await add_message_to_delete_dict(sub_active_msg, state)
-
-    await state.update_data(
-        sale_data=None, _add_msg=(sub_active_msg.chat.id, sub_active_msg.message_id)
-    )
-    await state.set_state()
-
-    if with_redirect:
-        await show_product_list(
-            product_dict=product_dict, user_id=message.from_user.id, state=state
-        )
-    else:
-        try:
-            await bot.delete_message(chat_id=msg[0], message_id=msg[-1])
-        except Exception as ex:
-            print("ERROR WITH TRY DELETE SCHEDULER EDIT SALE MESSAGE", ex)
-
-    try:
-        await message.delete()
-    except Exception:
-        pass
 
 
 @main_router.message(
@@ -1637,7 +1179,10 @@ async def new_edit_sale_proccess(
 
     if start_price <= float(new_sale):
         sub_active_msg = await message.answer(
-            text=f"Невалидные данные\nСкидка не может быть больше или равной цене товара\nПередано {new_sale}, Начальная цена товара: {start_price}"
+            text=(
+                "Невалидные данные\nСкидка не может быть больше или равной цене товара\n"
+                f"Передано {new_sale}, Начальная цена товара: {start_price}"
+            )
         )
 
         await add_message_to_delete_dict(sub_active_msg, state)
@@ -1723,7 +1268,9 @@ async def view_graphic(
             )
             _kb = create_or_add_exit_btn()
             await bot.edit_message_caption(
-                caption="Произошла ошибка, попробуйте еще раз или обратитесь в наше службу поддержки",
+                caption=(
+                    "Произошла ошибка, попробуйте еще раз или обратитесь в наше службу поддержки"
+                ),
                 chat_id=user_id,
                 message_id=message_id,
                 reply_markup=_kb.as_markup(),
@@ -1733,44 +1280,30 @@ async def view_graphic(
 
     if subscription.name == "Free":
         # Если бесплатная подписка, то график цен недоступен
-        #         _text = """*🚫 График доступен по подписке 📉*
+        _text = """*🚫 График доступен по подписке 📉*
 
-        # История изменения цены товара доступна только для пользователей с активной подпиской.
-
-        # *🔓 Оформите подписку, чтобы смотреть график и видеть лучшие моменты для покупки👇*"""
-        #         _kb = create_go_to_subscription_kb()
-        #         _kb_back = create_back_to_product_btn(
-        #             user_id=user_id,
-        #             product_id=product_id,
-        #             is_background_task=is_background_message,
-        #         )
-        #         for button in _kb_back.buttons:
-        #             _kb = _kb.row(button)
-        #         _kb = create_or_add_exit_btn(_kb)
-
-        #         await bot.edit_message_caption(
-        #             caption=_text,
-        #             chat_id=user_id,
-        #             message_id=message_id,
-        #             reply_markup=_kb.as_markup(),
-        #             parse_mode="markdown",
-        #         )
-        #         await callback.answer()
-        # return
-        _text = """*🚫 График скоро станет доступен только по подписке 📉*
-
-История изменения цены товара будет доступна только для пользователей с активной подпиской.
+История изменения цены товара доступна только для пользователей с активной подпиской.
 
 *🔓 Оформите подписку, чтобы смотреть график и видеть лучшие моменты для покупки👇*"""
         _kb = create_go_to_subscription_kb()
+        _kb_back = create_back_to_product_btn(
+            user_id=user_id,
+            product_id=product_id,
+            is_background_task=is_background_message,
+        )
+        for button in _kb_back.buttons:
+            _kb = _kb.row(button)
+        _kb = create_or_add_exit_btn(_kb)
 
-        message = await bot.send_message(
+        await bot.edit_message_caption(
+            caption=_text,
             chat_id=user_id,
-            text=_text,
+            message_id=message_id,
             reply_markup=_kb.as_markup(),
             parse_mode="markdown",
         )
-        await add_message_to_delete_dict(message, state)
+        await callback.answer()
+        return
 
     default_value = "МОСКВА"
 
@@ -1843,183 +1376,6 @@ async def view_graphic(
     except Exception as ex:
         print(ex)
         await callback.answer(text="Не удалось построить график", show_alert=True)
-
-
-@main_router.callback_query(F.data.startswith("view-product1"))
-async def view_product(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession,
-    bot: Bot,
-    marker: str = None,
-):
-    data = await state.get_data()
-
-    product_dict: dict = data.get("view_product_dict")
-
-    list_msg: tuple = product_dict.get("list_msg")
-
-    callback_data = callback.data.split("_")[1:]
-
-    _, marker, product_id = callback_data
-
-    match marker:
-        case "wb":
-            subquery = (
-                select(UserJob.job_id, UserJob.user_id, UserJob.product_id).where(
-                    UserJob.user_id == callback.from_user.id
-                )
-            ).subquery()
-
-            query = (
-                select(
-                    WbProduct.id,
-                    WbProduct.link,
-                    WbProduct.actual_price,
-                    WbProduct.start_price,
-                    WbProduct.user_id,
-                    WbProduct.name,
-                    WbProduct.sale,
-                    func.text("WB").label("product_marker"),
-                    subquery.c.job_id,
-                )
-                .select_from(WbProduct)
-                .join(User, WbProduct.user_id == User.tg_id)
-                .join(UserJob, UserJob.user_id == User.tg_id)
-                .outerjoin(subquery, subquery.c.product_id == WbProduct.id)
-                .where(
-                    and_(
-                        User.tg_id == callback.from_user.id,
-                        WbProduct.id == int(product_id),
-                    )
-                )
-                .distinct(WbProduct.id)
-            )
-
-            async with session as _session:
-                res = await _session.execute(query)
-
-                _data = res.fetchall()
-
-            if _data:
-                _product = _data[0]
-                (
-                    product_id,
-                    link,
-                    actaul_price,
-                    start_price,
-                    _,
-                    name,
-                    sale,
-                    product_marker,
-                    job_id,
-                ) = _product
-            else:
-                print("No _data")
-                await callback.answer()
-                return
-
-        case "ozon":
-            subquery = (
-                select(UserJob.job_id, UserJob.user_id, UserJob.product_id).where(
-                    UserJob.user_id == callback.from_user.id
-                )
-            ).subquery()
-
-            query = (
-                select(
-                    OzonProductModel.id,
-                    OzonProductModel.link,
-                    OzonProductModel.actual_price,
-                    OzonProductModel.start_price,
-                    OzonProductModel.user_id,
-                    OzonProductModel.name,
-                    OzonProductModel.sale,
-                    func.text("OZON").label("product_marker"),
-                    subquery.c.job_id,
-                )
-                .select_from(OzonProductModel)
-                .join(User, OzonProductModel.user_id == User.tg_id)
-                .join(UserJob, UserJob.user_id == User.tg_id)
-                .outerjoin(subquery, subquery.c.product_id == OzonProductModel.id)
-                .where(
-                    and_(
-                        User.tg_id == callback.from_user.id,
-                        OzonProductModel.id == int(product_id),
-                    )
-                )
-                .distinct(OzonProductModel.id)
-            )
-
-            async with session as _session:
-                res = await _session.execute(query)
-
-                _data = res.fetchall()
-
-            if _data:
-                _product = _data[0]
-                (
-                    product_id,
-                    link,
-                    actaul_price,
-                    start_price,
-                    _,
-                    name,
-                    sale,
-                    product_marker,
-                    job_id,
-                ) = _product
-            else:
-                print("No _data")
-                await callback.answer()
-                return
-        case _:
-            print(f"Unexpected marker {marker}")
-            await callback.answer()
-            return
-
-    _text_start_price = generate_pretty_amount(start_price)
-    _text_product_price = generate_pretty_amount(actaul_price)
-
-    _text_sale = generate_pretty_amount(sale)
-    _text_price_with_sale = generate_pretty_amount((start_price - sale))
-
-    _text = f'Название: <a href="{link}">{name}</a>\nМаркетплейс: {product_marker}\n\nНачальная цена: {_text_start_price}\nАктуальная цена: {_text_product_price}\n\nОтслеживается изменение цены на: {_text_sale}\nОжидаемая цена: {_text_price_with_sale}'
-
-    await state.update_data(
-        sale_data={
-            "link": link,
-            "sale": sale,
-            "start_price": start_price,
-        }
-    )
-
-    _kb = create_remove_and_edit_sale_kb(
-        user_id=callback.from_user.id,
-        product_id=product_id,
-        marker=marker,
-        job_id=job_id,
-        with_redirect=True,
-    )
-    _kb = create_or_add_return_to_product_list_btn(_kb)
-
-    if list_msg:
-        await bot.edit_message_text(
-            chat_id=list_msg[0],
-            message_id=list_msg[-1],
-            text=_text,
-            reply_markup=_kb.as_markup(),
-        )
-    else:
-        list_msg: types.Message = bot.send_message(
-            chat_id=callback.from_user.id, text=_text, reply_markup=_kb.as_markup()
-        )
-
-        await add_message_to_delete_dict(list_msg, state)
-
-        await state.update_data(list_msg=(list_msg.chat.id, list_msg.message_id))
-
-    await callback.answer()
 
 
 # new
@@ -2096,7 +1452,14 @@ async def new_view_product(
         _text_sale = generate_pretty_amount(sale)
         _text_price_with_sale = generate_pretty_amount((start_price - sale))
 
-        _text = f'Название: <a href="{link}">{name}</a>\n\nМаркетплейс: {product_marker}\n\nНачальная цена: {_text_start_price}\nАктуальная цена: {_text_product_price}\n\nОтслеживается изменение цены на: {_text_sale}\nОжидаемая цена: {_text_price_with_sale}'
+        _text = (
+            f'Название: <a href="{link}">{name}</a>\n\n'
+            f"Маркетплейс: {product_marker}\n\n"
+            f"Начальная цена: {_text_start_price}\n"
+            f"Актуальная цена: {_text_product_price}\n\n"
+            f"Отслеживается изменение цены на: {_text_sale}\n"
+            f"Ожидаемая цена: {_text_price_with_sale}"
+        )
 
         await state.update_data(
             sale_data={
