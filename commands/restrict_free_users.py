@@ -4,7 +4,7 @@ from db.base import get_session
 from db.repository.user import UserRepository
 from db.repository.subscription import SubscriptionRepository
 
-from background.tasks import drop_users_subscription
+from background.subscriptions import drop_users_subscription
 from commands.subscription_mass_sending import notify_users_that_subscription_ended
 from utils.scheduler import scheduler
 

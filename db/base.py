@@ -427,6 +427,53 @@ class UserJob(Base):
     user = relationship(User, back_populates="jobs")
 
 
+class MessageSendingStatus(enum.Enum):
+    CREATED = "CREATED"
+    TEST = "TEST"
+    UPCOMING = "UPCOMING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class MessageSending(Base):
+    __tablename__ = "message_sendings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(
+        Enum(MessageSendingStatus),
+        nullable=False,
+        default=MessageSendingStatus.CREATED,
+    )
+    started_at = Column(DateTime, nullable=True, default=None)
+    ended_at = Column(DateTime, nullable=True, default=None)
+    text = Column(String)
+
+    # stats
+    users_to_notify = Column(Integer, nullable=True, default=None)
+    users_notified = Column(Integer, nullable=True, default=None)
+    error_message = Column(String)
+
+
+class MessageSendingButtonType(enum.Enum):
+    TEXT = "TEXT"
+    DATA = "DATA"
+    URL = "URL"
+    KEYBOARD = "KEYBOARD"
+
+
+class MessageSendingButton(Base):
+    __tablename__ = "message_sending_butttons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_sending_id = Column(
+        Integer, ForeignKey("message_sendings.id"), nullable=False
+    )
+    type = Column(Enum(MessageSendingButtonType), nullable=False)
+    text = Column(String, nullable=False)
+    data = Column(String)
+
+
 sync_engine = create_engine(_db_url, echo=True)
 
 Base.prepare(autoload_with=sync_engine)

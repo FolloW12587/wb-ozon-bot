@@ -19,6 +19,8 @@ from utils.scheduler import (
     send_fake_price,
     setup_subscription_end_job,
     sync_popular_product_jobs,
+    setup_subscription_is_about_to_end_job,
+    setup_messages_sendigns_job,
 )
 from utils.utm import add_utm_to_db
 
@@ -95,6 +97,8 @@ async def on_startup():
 
     asyncio.create_task(sync_popular_product_jobs(scheduler))
     asyncio.create_task(setup_subscription_end_job(scheduler))
+    asyncio.create_task(setup_subscription_is_about_to_end_job(scheduler))
+    asyncio.create_task(setup_messages_sendigns_job(scheduler))
 
 
 @app.on_event("shutdown")

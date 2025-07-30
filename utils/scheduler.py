@@ -1111,6 +1111,35 @@ async def setup_subscription_end_job(scheduler: AsyncIOScheduler):
         replace_existing=True,
     )
 
+async def setup_subscription_is_about_to_end_job(scheduler: AsyncIOScheduler):
+    logger.info("Setup subscription_is_about_to_end job")
+
+    scheduler.add_job(
+        func=background_task_wrapper,
+        trigger=CronTrigger(hour=8, minute=0, second=0),
+        id="subscription_is_about_to_end",
+        coalesce=True,
+        args=("notify_users_about_subscription_ending",),
+        kwargs={"_queue_name": "arq:low"},  # _queue_name
+        jobstore="sqlalchemy",
+        replace_existing=True,
+    )
+
+
+async def setup_messages_sendigns_job(scheduler: AsyncIOScheduler):
+    logger.info("Setup messages_sendigns job")
+
+    scheduler.add_job(
+        func=background_task_wrapper,
+        trigger=IntervalTrigger(minutes=5),
+        id="messages_sendigns",
+        coalesce=True,
+        args=("process_message_sendings",),
+        kwargs={"_queue_name": "arq:low"},  # _queue_name
+        jobstore="sqlalchemy",
+        replace_existing=True,
+    )
+
 
 async def try_add_product_price_to_db(product_id: int, city: str | None, price: float):
 

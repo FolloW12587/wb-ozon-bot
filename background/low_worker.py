@@ -7,8 +7,12 @@ from background.tasks import (
     new_push_check_ozon_price,
     new_push_check_wb_price,
     periodic_delete_old_message,
-    search_users_for_ended_subscription,
 )
+from background.subscriptions import (
+    search_users_for_ended_subscription,
+    notify_users_about_subscription_ending,
+)
+from background.messaging import process_message_sendings
 
 
 from config import JOB_STORE_URL
@@ -40,6 +44,8 @@ class WorkerSettings:
         new_push_check_wb_price,
         periodic_delete_old_message,
         search_users_for_ended_subscription,
+        notify_users_about_subscription_ending,
+        process_message_sendings,
     ]
     on_startup = startup
     on_shutdown = shutdown
