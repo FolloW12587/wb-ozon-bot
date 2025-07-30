@@ -18,8 +18,10 @@ from db.repository.message_sending import MessageSendingRepository
 from db.repository.message_sending_button import MessageSendingButtonRepository
 from db.repository.user import UserRepository
 
+from bot22 import bot
 from logger import logger
 from schemas import MessageInfo
+from utils.pics import ImageManager
 
 
 async def process_message_sendings(ctx):
@@ -70,7 +72,20 @@ async def __process_message_sending(
     user_ids = await __get_user_ids_for_message_sending(session, is_test)
     logger.info("Got %s user ids for sending %s", len(user_ids), sending.id)
 
-    message_info = MessageInfo(text=sending.text, markup=markup)
+    try:
+        photo_id = await __get_photo_id(sending)
+    except Exception as e:
+        logger.error(
+            "Error in getting photo_id for sending %s", sending.id, exc_info=True
+        )
+        await ms_repo.update(
+            sending.id,
+            status=MessageSendingStatus.FAILED,
+            error_message=f"При получении id для картинки для рассылки произошла ошибка: {str(e)}",
+        )
+        return
+
+    message_info = MessageInfo(text=sending.text, markup=markup, photo_id=photo_id)
 
     await __pre_message_sending(sending)
     if not is_test:
@@ -104,8 +119,22 @@ async def __process_message_sending(
         sending.id,
         status=MessageSendingStatus.COMPLETED,
         users_notified=len(user_ids) - inactive_count,
+        ended_at=datetime.now(),
         error_message="",
     )
+
+
+async def __get_photo_id(sending: MessageSending) -> str | None:
+    logger.info("Getting photo for sending %s", sending.id)
+    if not sending.image:
+        logger.info("No photo provided for sending %s", sending.id)
+        return None
+
+    url = f"{config.PUBLIC_URL}/media/{sending.image}"
+    image_manager = ImageManager(bot)
+    photo_id = await image_manager.generate_photo_id_for_url(url)
+    logger.info("Generated photo id %s for sending %s", photo_id, sending.id)
+    return photo_id
 
 
 async def __get_user_ids_for_message_sending(

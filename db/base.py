@@ -448,6 +448,7 @@ class MessageSending(Base):
     started_at = Column(DateTime, nullable=True, default=None)
     ended_at = Column(DateTime, nullable=True, default=None)
     text = Column(String)
+    image = Column(String, nullable=True, default=None)
 
     # stats
     users_to_notify = Column(Integer, nullable=True, default=None)
