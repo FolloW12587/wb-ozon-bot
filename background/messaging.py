@@ -222,7 +222,7 @@ async def __pre_message_sending(sending: MessageSending):
         MessageInfo(
             text=(
                 f"Начинаем рассылку [{sending.id}]"
-                f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/1/change/)"
+                f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/{sending.id}/change/)"
             )
         ),
     )
@@ -238,7 +238,7 @@ async def __post_message_sending(
         MessageInfo(
             text=(
                 f"Рассылка [{sending.id}]"
-                f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/1/change/) закончена. "
+                f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/{sending.id}/change/) закончена. "
                 f"Пользователей в рассылке {users_count}, из них неактивных {inactive_count}"
             )
         ),
