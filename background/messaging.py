@@ -24,7 +24,11 @@ from schemas import MessageInfo
 from utils.pics import ImageManager
 
 
-async def process_message_sendings(ctx):
+class MessageSendingError(Exception):
+    pass
+
+
+async def process_message_sendings(_):
     async for session in get_session():
         ms_repo = MessageSendingRepository(session)
 
@@ -33,14 +37,14 @@ async def process_message_sendings(ctx):
             logger.info("Found %s sendings", len(sendings))
 
         for sending in sendings:
-            await __process_message_sending(session, ms_repo, sending, False)
+            await __safe_process_message_sending(session, ms_repo, sending, False)
 
         test_sendings = await ms_repo.get_by_status(MessageSendingStatus.TEST)
         if test_sendings:
             logger.info("Found %s sendings", len(test_sendings))
 
         for sending in test_sendings:
-            await __process_message_sending(session, ms_repo, sending, True)
+            await __safe_process_message_sending(session, ms_repo, sending, True)
 
 
 async def __process_message_sending(
@@ -65,9 +69,11 @@ async def __process_message_sending(
         await ms_repo.update(
             sending.id,
             status=MessageSendingStatus.FAILED,
-            error_message=f"При создании кнопок для рассылки произошла ошибка: {str(e)}",
+            error_message=f"При создании кнопок для рассылки произошла ошибка:\n{str(e)}",
         )
-        return
+        raise MessageSendingError(
+            f"При создании кнопок для рассылки произошла ошибка:\n{str(e)}"
+        ) from e
 
     user_ids = await __get_user_ids_for_message_sending(session, is_test)
     logger.info("Got %s user ids for sending %s", len(user_ids), sending.id)
@@ -81,32 +87,26 @@ async def __process_message_sending(
         await ms_repo.update(
             sending.id,
             status=MessageSendingStatus.FAILED,
-            error_message=f"При получении id для картинки для рассылки произошла ошибка: {str(e)}",
+            error_message=f"При получении id для картинки для рассылки произошла ошибка:\n{str(e)}",
         )
-        return
+        raise MessageSendingError(
+            f"При получении id для картинки для рассылки произошла ошибка:\n{str(e)}"
+        ) from e
 
     message_info = MessageInfo(text=sending.text, markup=markup, photo_id=photo_id)
 
-    await __pre_message_sending(sending)
-    if not is_test:
-        await ms_repo.update(
-            sending.id,
-            started_at=datetime.now(),
-            users_to_notify=len(user_ids),
-        )
     try:
-        results = await mass_sending_message(user_ids, [message_info])
-        inactive_count = await set_users_as_inactive(user_ids, results, session)
+        await __validate_message(message_info)
     except Exception as e:
-        logger.error("Error in mass sending %s", sending.id, exc_info=True)
         await ms_repo.update(
             sending.id,
             status=MessageSendingStatus.FAILED,
-            error_message=f"При выполнении рассылки произошла ошибка: {str(e)}",
+            error_message=f"При валидации рассылки произошла ошибка:\n{str(e)}",
         )
-        return
+        raise MessageSendingError(
+            f"При валидации рассылки произошла ошибка:\n{str(e)}"
+        ) from e
 
-    await __post_message_sending(sending, len(user_ids), inactive_count)
     if is_test:
         await ms_repo.update(
             sending.id,
@@ -115,6 +115,28 @@ async def __process_message_sending(
         )
         return
 
+    await __pre_message_sending(sending)
+    await ms_repo.update(
+        sending.id,
+        started_at=datetime.now(),
+        users_to_notify=len(user_ids),
+    )
+    try:
+        results = await mass_sending_message(user_ids, [message_info])
+        inactive_count = await set_users_as_inactive(user_ids, results, session)
+    except Exception as e:
+        logger.error("Error in mass sending %s", sending.id, exc_info=True)
+        await ms_repo.update(
+            sending.id,
+            status=MessageSendingStatus.FAILED,
+            error_message=f"При выполнении рассылки произошла ошибка:\n{str(e)}",
+        )
+        raise MessageSendingError(
+            f"При выполнении рассылки произошла ошибка:\n{str(e)}"
+        ) from e
+
+    await __post_message_sending(sending, len(user_ids), inactive_count)
+
     await ms_repo.update(
         sending.id,
         status=MessageSendingStatus.COMPLETED,
@@ -122,6 +144,21 @@ async def __process_message_sending(
         ended_at=datetime.now(),
         error_message="",
     )
+
+
+async def __safe_process_message_sending(
+    session: AsyncSession,
+    ms_repo: MessageSendingRepository,
+    sending: MessageSending,
+    is_test: bool,
+):
+    try:
+        await __process_message_sending(session, ms_repo, sending, is_test)
+    except MessageSendingError as e:
+        await send_message(
+            config.PAYMENTS_CHAT_ID,
+            MessageInfo(text=str(e)),
+        )
 
 
 async def __get_photo_id(sending: MessageSending) -> str | None:
@@ -238,8 +275,22 @@ async def __post_message_sending(
         MessageInfo(
             text=(
                 f"Рассылка [{sending.id}]"
-                f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/{sending.id}/change/) закончена. "
-                f"Пользователей в рассылке {users_count}, из них неактивных {inactive_count}"
+                f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/{sending.id}/change/) "
+                f"закончена. Пользователей в рассылке {users_count}, "
+                f"из них неактивных {inactive_count}"
             )
         ),
     )
+
+
+async def __validate_message(message_info: MessageInfo) -> bool:
+    logger.info("Validating message info")
+
+    try:
+        await send_message(
+            config.PAYMENTS_CHAT_ID,
+            message_info,
+        )
+    except Exception:
+        logger.error("Message info is broken", exc_info=True)
+        raise

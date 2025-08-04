@@ -1,11 +1,11 @@
-import json
-import re
-import pytz
 import asyncio
-import aiofiles
+import json
 
 from datetime import datetime, timedelta
 from typing import Literal
+
+import aiofiles
+import pytz
 
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -1110,6 +1110,7 @@ async def setup_subscription_end_job(scheduler: AsyncIOScheduler):
         jobstore="sqlalchemy",
         replace_existing=True,
     )
+
 
 async def setup_subscription_is_about_to_end_job(scheduler: AsyncIOScheduler):
     logger.info("Setup subscription_is_about_to_end job")

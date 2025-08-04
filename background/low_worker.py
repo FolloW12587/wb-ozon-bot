@@ -1,3 +1,4 @@
+from arq import func
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
@@ -16,6 +17,7 @@ from background.messaging import process_message_sendings
 
 
 from config import JOB_STORE_URL
+from logger import logger
 
 
 async def startup(ctx):
@@ -45,7 +47,7 @@ class WorkerSettings:
         periodic_delete_old_message,
         search_users_for_ended_subscription,
         notify_users_about_subscription_ending,
-        process_message_sendings,
+        func(process_message_sendings, timeout=30 * 60),
     ]
     on_startup = startup
     on_shutdown = shutdown
