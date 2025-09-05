@@ -390,7 +390,7 @@ async def check_user(
         repo = UserRepository(_session)
         user = await repo.find_by_id(message.from_user.id)
         if user:
-            repo.update(user.tg_id, is_active=True)
+            await repo.update(user.tg_id, is_active=True)
             return True
 
         return await add_user(message, _session, utm_source)

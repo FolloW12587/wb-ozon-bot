@@ -22,7 +22,7 @@ class UserProductRepository(BaseRepository[UserProduct]):
         )
         result = await self.session.execute(stmt)
 
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_marker_products(self, user_id: int, marker: str) -> list[UserProduct]:
         stmt = (

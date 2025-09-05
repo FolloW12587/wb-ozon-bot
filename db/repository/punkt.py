@@ -19,4 +19,4 @@ class PunktRepository(BaseRepository[Punkt]):
         result = await self.session.execute(
             select(self.model_class).where(self.model_class.user_id == user_id)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()

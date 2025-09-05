@@ -59,4 +59,4 @@ class BaseRepository(Generic[M]):
 
     async def first(self) -> M | None:
         result = await self.session.execute(select(self.model_class))
-        return result.scalar_one_or_none()
+        return result.scalars().first()

@@ -14,7 +14,7 @@ class SubscriptionRepository(BaseRepository[Subscription]):
             select(self.model_class).where(self.model_class.name == name)
         )
 
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_paid_subscriptions(self) -> list[Subscription]:
         result = await self.session.execute(

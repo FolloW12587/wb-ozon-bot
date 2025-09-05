@@ -31,7 +31,7 @@ class UserSubscriptionRepository(BaseRepository[UserSubscription]):
             )
             .order_by(self.model_class.active_to.desc().nulls_last())
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def new_subscription(
         self,
@@ -65,7 +65,7 @@ class UserSubscriptionRepository(BaseRepository[UserSubscription]):
             .order_by(self.model_class.active_to.desc().nulls_last())
         )
 
-        active_to = result.scalar_one_or_none()
+        active_to = result.scalars().first()
         if not active_to:
             return datetime.now(tz=timezone.utc).date()
 
