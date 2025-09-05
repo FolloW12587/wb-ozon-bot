@@ -1,5 +1,6 @@
 import asyncio
 
+from fastapi.responses import JSONResponse
 from uvicorn import Config, Server
 from starlette.middleware.cors import CORSMiddleware
 
@@ -39,6 +40,14 @@ from logger import logger
 
 
 dp = Dispatcher(storage=storage)
+
+
+@dp.errors()
+async def aiogram_global_error_handler(event: types.ErrorEvent):
+    print("AIOGRAM ERROR")
+    logger.exception("Unhandled aiogram exception", exc_info=event.exception)
+
+
 dp.include_router(payments_router)
 dp.include_router(main_router)
 
@@ -155,3 +164,19 @@ async def yoomoney_webhook(request: Request, yoomoney_service: YoomoneyServiceDe
 
 if __name__ == "__main__":
     event_loop.run_until_complete(server.serve())
+
+
+@app.exception_handler(Exception)
+def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(
+        "Unhandled exception occurred",
+        exc_info=exc,
+        extra={
+            "error": str(exc),
+        },
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"message": "Unhandled exception occured"}},
+    )
