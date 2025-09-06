@@ -33,11 +33,14 @@ class OzonAPIService:
                     print(f"OZON RESPONSE CODE {_status_code}")
 
                     if _status_code != 200:
-                        raise OzonAPICrashError()
+                        _text = await response.text()
+                        raise OzonAPICrashError(
+                            f"Status code is not 200 {_status_code}. Text: {_text}"
+                        )
 
                     return await response.text()
             except TimeoutError as e:
-                raise OzonAPICrashError() from e
+                raise OzonAPICrashError("API timeout occured") from e
 
     def parse_product_data(self, raw_data: str) -> ProductDTO:
         short_link = raw_data.split("|")[0]

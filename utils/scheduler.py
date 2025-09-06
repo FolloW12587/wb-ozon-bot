@@ -704,21 +704,24 @@ async def try_update_wb_product_photo(
 
 
 async def try_get_wb_product_photo(short_link: str, session: AsyncSession):
-    async with session as _session:
-        repo = ProductRepository(session)
-        product = await repo.find_by_short_link(short_link)
-        if product:
-            return product.photo_id
+    try:
+        async with session:
+            repo = ProductRepository(session)
+            product = await repo.find_by_short_link(short_link)
+            if product:
+                return product.photo_id
 
-    api_service = WbAPIService()
-    image_data = await api_service.get_product_image(short_link)
+        api_service = WbAPIService()
+        image_data = await api_service.get_product_image(short_link)
 
-    image_name = "test_image.png"
+        image_name = "test_image.png"
 
-    async with aiofiles.open(image_name, "wb") as file:
-        await file.write(image_data)
+        async with aiofiles.open(image_name, "wb") as file:
+            await file.write(image_data)
 
-    return await image_manager.generate_photo_id_for_file(f"./{image_name}")
+        return await image_manager.generate_photo_id_for_file(f"./{image_name}")
+    except Exception:
+        return None
 
 
 async def save_wb_product(

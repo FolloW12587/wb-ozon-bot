@@ -113,6 +113,7 @@ async def new_add_product_task(cxt, user_data: dict):
             print("Таймаут по запросу к OZON API", ex)
         except Exception as ex:
             print(ex)
+            logger.error("Про добавлении товара %s произошла ошибка", exc_info=True)
             _text = (
                 f"‼️ Возникла ошибка при добавлении {product_marker} товара\n\n"
                 f"Попробуйте повторить позже"

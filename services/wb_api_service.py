@@ -27,11 +27,14 @@ class WbAPIService:
             try:
                 async with aiosession.get(url=url, timeout=timeout) as response:
                     _status_code = response.status
-                    print(f"OZON RESPONSE CODE {_status_code}")
+                    print(f"WB RESPONSE CODE {_status_code}")
 
                     if _status_code != 200:
-                        raise WbAPICrashError()
+                        _text = await response.text()
+                        raise WbAPICrashError(
+                            f"Status code is not 200 {_status_code}. Text: {_text}"
+                        )
 
                     return await response.text()
             except TimeoutError as e:
-                raise WbAPICrashError() from e
+                raise WbAPICrashError("Timeout api") from e
