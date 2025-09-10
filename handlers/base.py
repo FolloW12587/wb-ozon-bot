@@ -45,6 +45,7 @@ from db.repository.user_product_job import UserProductJobRepository
 
 from keyboards import (
     create_back_to_product_btn,
+    create_cancel_edit_sale_kb,
     create_go_to_subscription_kb,
     create_or_add_exit_faq_btn,
     create_or_add_cancel_btn,
@@ -1116,6 +1117,20 @@ async def new_edit_sale_callback(
     await callback.answer()
 
 
+@main_router.callback_query(F.data.startswith("cancel_edit_sale"))
+async def cancel_edit_sale_callback(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+):
+    data = await state.get_data()
+
+    await state.update_data(sale_data=None, _add_msg=None)
+    await state.set_state()
+
+    await callback.answer("Редактирование скидки отменено", show_alert=True)
+    await delete_prev_subactive_msg(data)
+
+
 @main_router.message(
     and_f(NewEditSale.new_sale), F.content_type == types.ContentType.TEXT
 )
@@ -1132,8 +1147,14 @@ async def new_edit_sale_proccess(
     await delete_prev_subactive_msg(data)
 
     if not new_sale.isdigit():
+        kb = create_cancel_edit_sale_kb()
         sub_active_msg = await message.answer(
-            text=f"Невалидные данные\nОжидается число, передано: {new_sale}"
+            text=(
+                "Вы пытаетесь отредактировать скидку на товар, однако переданные "
+                f"данные не являются скидкой.\nОжидается число, передано: {new_sale}.\n\n"
+                "Введите корректную скидку или отмените её редактирование"
+            ),
+            reply_markup=kb.as_markup(),
         )
 
         await add_message_to_delete_dict(sub_active_msg, state)
@@ -1156,7 +1177,10 @@ async def new_edit_sale_proccess(
     sale_data: dict = data.get("sale_data")
 
     if not sale_data:
-        sub_active_msg = await message.answer("Ошибка")
+        sub_active_msg = await message.answer(
+            "Произошла непредвиденная ошибка! Пожалуйста, попробуйте позднее"
+        )
+        await state.set_state()
 
         await add_message_to_delete_dict(sub_active_msg, state)
 
