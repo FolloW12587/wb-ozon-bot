@@ -130,7 +130,7 @@ def create_cancel_edit_sale_kb():
     _kb = InlineKeyboardBuilder()
     _kb.add(
         types.InlineKeyboardButton(
-            text="Отменить редактирование ссылки", callback_data="cancel_edit_sale"
+            text="Отменить редактирование скидки", callback_data="cancel_edit_sale"
         )
     )
     return _kb
