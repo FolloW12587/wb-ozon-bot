@@ -101,7 +101,7 @@ def create_or_add_exit_btn(_kb: InlineKeyboardBuilder = None):
 
 
 def add_back_btn(_kb: InlineKeyboardBuilder):
-    _kb.row(types.InlineKeyboardButton(text="На главную", callback_data=f"to_main"))
+    _kb.row(types.InlineKeyboardButton(text="На главную", callback_data="to_main"))
 
     return _kb
 
@@ -272,14 +272,14 @@ def create_product_list_kb(
     for product in product_list:
         (
             product_id,
-            link,
-            actaul_price,
-            start_price,
+            _,  # link,
+            _,  # actaul_price,
+            _,  # start_price,
             user_id,
-            time_create,
+            _,  # time_create,
             name,
-            sale,
-            job_id,
+            _,  # sale,
+            _,  # job_id,
         ) = product
         _callback_data = f"view-product_{user_id}_{marker}_{product_id}"
 
@@ -314,9 +314,18 @@ def new_create_product_list_for_page_kb(product_list_for_page: list[tuple]):
     _kb = InlineKeyboardBuilder()
 
     for product in product_list_for_page:
-        product_id, link, actual, start, user_id, _date, marker, name, sale, job_id = (
-            product
-        )
+        (
+            product_id,
+            _,  # link,
+            _,  # actual,
+            _,  # start,
+            user_id,
+            _date,
+            marker,
+            name,
+            _,  # sale,
+            _,  # job_id,
+        ) = product
 
         _callback_data = f"view-product_{user_id}_{marker}_{product_id}"
 
@@ -332,7 +341,6 @@ def new_add_pagination_btn(_kb: InlineKeyboardBuilder, product_dict: dict):
     pages = product_dict.get("pages")
     len_product_list = product_dict.get("len_product_list")
     current_page = product_dict.get("current_page")
-    product_list = product_dict.get("product_list")
 
     kb_init: str
 
@@ -472,17 +480,17 @@ def create_punkt_settings_block_kb(has_punkt: str = None):
     _kb = InlineKeyboardBuilder()
 
     if has_punkt:
-        _text = f"Изменить пункт выдачи"
-        _callback_data = f"punkt_edit"
+        _text = "Изменить пункт выдачи"
+        _callback_data = "punkt_edit"
     else:
-        _text = f"Добавить пункт выдачи"
-        _callback_data = f"punkt_add"
+        _text = "Добавить пункт выдачи"
+        _callback_data = "punkt_add"
 
     _kb.row(types.InlineKeyboardButton(text=_text, callback_data=_callback_data))
 
     if has_punkt:
-        _delete_text = f"Удалить пункт выдачи"
-        _delete_callback_data = f"punkt_delete"
+        _delete_text = "Удалить пункт выдачи"
+        _delete_callback_data = "punkt_delete"
 
         _kb.row(
             types.InlineKeyboardButton(
