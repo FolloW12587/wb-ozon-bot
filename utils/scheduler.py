@@ -629,7 +629,6 @@ async def save_popular_wb_product(
 async def save_ozon_product(
     user_id: int,
     link: str,
-    name: str | None,
     is_first_product: bool,
     session: AsyncSession,
     scheduler: AsyncIOScheduler,
@@ -868,7 +867,6 @@ async def new_save_product(
         await save_ozon_product(
             user_id=msg[0],
             link=link,
-            name=_name,
             is_first_product=is_first_product,
             session=session,
             scheduler=scheduler,

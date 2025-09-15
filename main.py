@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
 
 @app.exception_handler(Exception)
-def global_exception_handler(request: Request, exc: Exception):
+def global_exception_handler(_: Request, exc: Exception):
     logger.exception(
         "Unhandled exception occurred",
         exc_info=exc,

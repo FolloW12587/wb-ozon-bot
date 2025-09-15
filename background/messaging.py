@@ -5,7 +5,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
 
 import config
-from commands.send_message import mass_sending_message, send_message
+from commands.send_message import mass_sending_message, notify_admins
 from commands.set_users_as_inactive import set_users_as_inactive
 from db.base import (
     get_session,
@@ -155,10 +155,7 @@ async def __safe_process_message_sending(
     try:
         await __process_message_sending(session, ms_repo, sending, is_test)
     except MessageSendingError as e:
-        await send_message(
-            config.PAYMENTS_CHAT_ID,
-            MessageInfo(text=str(e)),
-        )
+        await notify_admins(MessageInfo(text=str(e)))
 
 
 async def __get_photo_id(sending: MessageSending) -> str | None:
@@ -179,7 +176,7 @@ async def __get_user_ids_for_message_sending(
 ) -> list[int]:
     logger.info("Getting user ids")
     if is_test:
-        return [config.PAYMENTS_CHAT_ID]
+        return [config.ADMINS_CHAT_ID]
 
     repo = UserRepository(session)
     users = await repo.get_active()
@@ -254,14 +251,13 @@ def __create_inline_kb(
 async def __pre_message_sending(sending: MessageSending):
     logger.info("Starting mass sending")
 
-    await send_message(
-        config.PAYMENTS_CHAT_ID,
+    await notify_admins(
         MessageInfo(
             text=(
                 f"Начинаем рассылку [{sending.id}]"
                 f"({config.PUBLIC_URL}/admin/message_sendings/messagesending/{sending.id}/change/)"
             )
-        ),
+        )
     )
 
 
@@ -270,8 +266,7 @@ async def __post_message_sending(
 ):
     logger.info("Ended mass sending")
 
-    await send_message(
-        config.PAYMENTS_CHAT_ID,
+    await notify_admins(
         MessageInfo(
             text=(
                 f"Рассылка [{sending.id}]"
@@ -279,7 +274,7 @@ async def __post_message_sending(
                 f"закончена. Пользователей в рассылке {users_count}, "
                 f"из них неактивных {inactive_count}"
             )
-        ),
+        )
     )
 
 
@@ -287,10 +282,7 @@ async def __validate_message(message_info: MessageInfo) -> bool:
     logger.info("Validating message info")
 
     try:
-        await send_message(
-            config.PAYMENTS_CHAT_ID,
-            message_info,
-        )
+        await notify_admins(message_info)
     except Exception:
         logger.error("Message info is broken", exc_info=True)
         raise

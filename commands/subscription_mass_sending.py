@@ -4,11 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.repository.user import UserRepository
 from db.base import get_session
 
-from commands.send_message import mass_sending_message, send_message
+from commands.send_message import mass_sending_message, notify_admins
 from commands.set_users_as_inactive import set_users_as_inactive
 from keyboards import create_reply_start_kb, create_go_to_subscription_kb
-
-import config
 
 from bot22 import bot
 from logger import logger
@@ -70,14 +68,13 @@ async def subscription_mass_sending():
             active_user_ids, results, session
         )
 
-    await send_message(
-        config.PAYMENTS_CHAT_ID,
+    await notify_admins(
         MessageInfo(
             text=(
                 f"Рассылка закончена. Пользователей найдено: {len(active_user_ids)}. "
                 f"Из них {num_set_as_inactive} неактивных"
             )
-        ),
+        )
     )
 
 
@@ -129,12 +126,11 @@ async def notify_users_that_subscription_ended(
     )
     inactive_num = await set_users_as_inactive(user_ids, results, session)
 
-    await send_message(
-        config.PAYMENTS_CHAT_ID,
+    await notify_admins(
         MessageInfo(
             text=(
                 f"У {len(user_ids)} пользователей закончилась подписка. "
                 f"Из них {inactive_num} неактивных."
             )
-        ),
+        )
     )

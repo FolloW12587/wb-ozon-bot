@@ -125,6 +125,9 @@ class User(Base):
     )
     utm_source = Column(String, nullable=True, default=None)
     is_active = Column(Boolean, default=True, server_default=text("true"))
+    invited_by_user = Column(
+        BigInteger, ForeignKey("users.tg_id"), nullable=True, default=None
+    )
     #
     wb_total_count = Column(Integer, default=0)
     ozon_total_count = Column(Integer, default=0)

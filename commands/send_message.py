@@ -2,6 +2,7 @@ from asyncio import sleep
 
 # import config
 from bot22 import bot
+import config
 from logger import logger
 
 from schemas import MessageInfo
@@ -59,3 +60,7 @@ async def mass_sending_message(
             output.append(False)
 
     return output
+
+
+async def notify_admins(message: MessageInfo):
+    await send_message(config.ADMINS_CHAT_ID, message)

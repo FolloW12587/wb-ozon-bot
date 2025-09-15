@@ -1,24 +1,22 @@
-import os
-
-
-import pandas as pd
-
-from datetime import datetime
-
 from asyncio import sleep
-
-from arq import ArqRedis
-import pytz
-
-import plotly.graph_objects as go
+from datetime import datetime
+import os
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
+from arq import ArqRedis
+
+import pandas as pd
+import pytz
+
+import plotly.graph_objects as go
 
 from sqlalchemy import update, select, and_, insert, Subquery, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot22 import bot
+
+from commands.send_message import notify_admins
 
 from db.base import (
     Punkt,
@@ -30,7 +28,11 @@ from db.base import (
 )
 from db.repository.subscription import SubscriptionRepository
 from db.repository.user import UserRepository
+from db.repository.user_subscription import UserSubscriptionRepository
 from db.repository.utm import UTMRepository
+from payments.notifications import notify_user_about_referal_free_subscription
+from payments.utils import give_users_free_referal_trial
+from schemas import MessageInfo
 from utils.pics import ImageManager
 
 from utils.exc import NotEnoughGraphicData
@@ -46,6 +48,8 @@ from keyboards import (
     new_add_pagination_btn,
     new_create_product_list_for_page_kb,
 )
+
+from logger import logger
 
 
 DEFAULT_PAGE_ELEMENT_COUNT = 5
@@ -370,6 +374,10 @@ async def add_user(
     if not utm_source or utm_source.startswith("direct"):
         return True
 
+    if utm_source.startswith("inviter"):
+        await handle_referal_invitation(user, utm_source, session)
+        return True
+
     utm_repo = UTMRepository(session)
     utms = await utm_repo.get_by_keitaro_id(utm_source)
 
@@ -394,6 +402,84 @@ async def check_user(
             return True
 
         return await add_user(message, _session, utm_source)
+
+
+async def handle_referal_invitation(
+    invited_user: User, utm_source: str, session: AsyncSession
+):
+    logger.info(
+        "Handling referal invitation for user %s, source: %s",
+        invited_user.tg_id,
+        utm_source,
+    )
+    if invited_user.invited_by_user is not None:
+        logger.error(
+            "User can't be invited because he is already invited by %s",
+            invited_user.invited_by_user,
+        )
+        return
+
+    user_repo = UserRepository(session)
+    us_repo = UserSubscriptionRepository(session)
+    subscription_repo = SubscriptionRepository(session)
+
+    subscriptions = await subscription_repo.get_paid_subscriptions()
+    if len(subscriptions) < 0:
+        logger.error("Can't find any paid subscriptions")
+        return
+    subscription = subscriptions[0]
+
+    inviter_id = utm_source.split("_")[-1]
+    try:
+        inviter_id = int(inviter_id)
+    except ValueError:
+        logger.error("Inviter id should be valid integer %s", inviter_id)
+        return
+
+    if inviter_id == invited_user.tg_id:
+        logger.error("User can't invite himself")
+        return
+
+    inviter = await user_repo.find_by_id(inviter_id)
+    if not inviter:
+        logger.error("Can't find inviter user with id %s", inviter_id)
+        return
+
+    try:
+        await give_users_free_referal_trial(
+            us_repo=us_repo,
+            user_repo=user_repo,
+            invited_user=invited_user,
+            inviter=inviter,
+            subscription_id=subscription.id,
+        )
+    except Exception:
+        logger.error("Error in giving free trial subscriptions to users", exc_info=True)
+        await notify_admins(
+            MessageInfo(
+                text=(
+                    "Произошла ошибка при попытке дать пользователям триал за рефералку"
+                )
+            )
+        )
+        return
+
+    try:
+        await notify_user_about_referal_free_subscription(invited_user.tg_id, True)
+        await notify_user_about_referal_free_subscription(inviter.tg_id, False)
+    except Exception:
+        logger.error(
+            "Error in notifying users about free referal subscription", exc_info=True
+        )
+
+    await notify_admins(
+        MessageInfo(
+            text=(
+                f"Пользователь @{invited_user.username or invited_user.tg_id} "
+                f"пришел по рефералке от @{inviter.username or inviter.tg_id}"
+            )
+        )
+    )
 
 
 async def new_check_has_punkt(user_id: int, session: AsyncSession):

@@ -58,7 +58,7 @@ _db_url = URL.create(
 DUMP_CHAT = os.getenv("DUMP_CHAT")
 ADMIN_IDS = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = list(map(int, ADMIN_IDS.split(","))) if ADMIN_IDS else []
-PAYMENTS_CHAT_ID = os.getenv("PAYMENTS_CHAT_ID")
+ADMINS_CHAT_ID = os.getenv("PAYMENTS_CHAT_ID")
 
 # Redis
 REDIS_HOST = os.environ.get("REDIS_HOST")
