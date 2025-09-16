@@ -61,7 +61,10 @@ class UserSubscriptionRepository(BaseRepository[UserSubscription]):
     async def get_start_date_for_new_subscription(self, user_id: int) -> date:
         result = await self.session.execute(
             select(self.model_class.active_to)
-            .where(self.model_class.user_id == user_id)
+            .where(
+                self.model_class.user_id == user_id,
+                self.model_class.active_to >= datetime.now(tz=timezone.utc).date(),
+            )
             .order_by(self.model_class.active_to.desc().nulls_last())
         )
 

@@ -100,3 +100,4 @@ YOOMONEY_NOTIFICATION_SECRET = os.environ.get("YOOMONEY_NOTIFICATION_SECRET")
 
 
 SUPPORT_BOT_URL = "https://t.me/NaSkidku_support"
+BOT_URL = os.getenv("BOT_URL", "https://t.me/NaSkidku_bot")

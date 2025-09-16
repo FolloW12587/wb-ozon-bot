@@ -4,6 +4,7 @@ import os
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.text_decorations import markdown_decoration as md
 from arq import ArqRedis
 
 import pandas as pd
@@ -475,8 +476,8 @@ async def handle_referal_invitation(
     await notify_admins(
         MessageInfo(
             text=(
-                f"Пользователь @{invited_user.username or invited_user.tg_id} "
-                f"пришел по рефералке от @{inviter.username or inviter.tg_id}"
+                f"Пользователь @{md.quote(invited_user.username or str(invited_user.tg_id))} "
+                f"пришел по рефералке от @{md.quote(inviter.username or str(inviter.tg_id))}"
             )
         )
     )

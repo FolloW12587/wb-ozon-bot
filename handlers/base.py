@@ -495,13 +495,14 @@ async def specific_settings_block(
     match settings_marker:
         case "punkt":
             await __settings_punkt_handler(session, state, callback.from_user.id, bot)
-            await callback.answer()
         case "faq":
             await __settings_faq_handler(state, callback.from_user.id, bot)
-            await callback.answer()
         case "company":
             await __settings_company_handler(state, callback.from_user.id, bot)
-            await callback.answer()
+        case "invite":
+            await __settings_invite_hander(state, callback.from_user.id, bot)
+
+    await callback.answer()
 
 
 async def __settings_punkt_handler(
@@ -573,6 +574,29 @@ async def __settings_company_handler(state: FSMContext, user_id: int, bot: Bot):
         chat_id=user_id,
         message_id=settings_msg[-1],
         reply_markup=_kb.as_markup(),
+    )
+
+
+async def __settings_invite_hander(state: FSMContext, user_id: int, bot: Bot):
+    data = await state.get_data()
+    settings_msg: tuple = data.get("settings_msg")
+
+    _kb = create_or_add_exit_btn()
+
+    invitation_url = f"{config.BOT_URL}?start=inviter_{user_id}".replace("_", "\\_")
+    _text = (
+        "Пригласите нового пользователя и получите по *2 недели* бесплатного доступа "
+        "к платным функциям!\n\n"
+        f"🔗{invitation_url}\n\n"
+        "Просто перешлите другу ссылку ☝️"
+    )
+
+    await bot.edit_message_text(
+        text=_text,
+        chat_id=user_id,
+        message_id=settings_msg[-1],
+        reply_markup=_kb.as_markup(),
+        parse_mode="markdown",
     )
 
 
