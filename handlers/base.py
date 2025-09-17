@@ -99,8 +99,6 @@ main_router = Router()
 moscow_tz = pytz.timezone("Europe/Moscow")
 
 
-SUB_START_TEXT = "🖐Здравствуйте, {}"
-
 START_TEXT = (
     "С помощью этого бота вы сможете отследить изменение цены "
     "на понравившиеся товары в маркетплейсах Wildberries и Ozon."
@@ -131,8 +129,6 @@ async def start(
             utm_source = query_param[-1]
             print("UTM_SOURCE", utm_source)
 
-    await check_user(message, session, utm_source)
-
     if isinstance(message, types.CallbackQuery):
         message = message.message
 
@@ -140,12 +136,19 @@ async def start(
 
     faq_kb = create_faq_kb()
 
+    message1_text = (
+        f"🖐Здравствуйте, {message.from_user.username}"
+        if message.from_user.username
+        else "🖐Здравствуйте"
+    )
     await bot.send_message(
-        text=SUB_START_TEXT.format(message.from_user.username),
+        text=message1_text,
         chat_id=_message.chat.id,
         reply_markup=_kb.as_markup(resize_keyboard=True),
         disable_notification=True,
     )
+
+    await check_user(message, session, utm_source)
 
     start_msg: types.Message = await bot.send_photo(
         chat_id=message.chat.id,
@@ -585,10 +588,11 @@ async def __settings_invite_hander(state: FSMContext, user_id: int, bot: Bot):
 
     invitation_url = f"{config.BOT_URL}?start=inviter_{user_id}".replace("_", "\\_")
     _text = (
-        "Пригласите нового пользователя и получите по *2 недели* бесплатного доступа "
-        "к платным функциям!\n\n"
+        "*🎉 Дарим бонус за друзей!*\n\n"
+        "Пригласите нового пользователя — и *вы оба получите по"
+        " 2 недели бесплатного доступа* ко всем функциям бота 🔥\n\n"
         f"🔗{invitation_url}\n\n"
-        "Просто перешлите другу ссылку ☝️"
+        "☝️ Просто перешлите её другу, и вместе наслаждайтесь безлимитными возможностями!"
     )
 
     await bot.edit_message_text(
