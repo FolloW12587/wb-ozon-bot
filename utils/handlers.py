@@ -446,6 +446,8 @@ async def handle_referal_invitation(
         logger.error("Can't find inviter user with id %s", inviter_id)
         return
 
+    await user_repo.update(invited_user.tg_id, invited_by_user=inviter_id)
+    await session.refresh(invited_user)
     try:
         await give_users_free_referal_trial(
             us_repo=us_repo,
