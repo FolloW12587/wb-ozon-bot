@@ -9,7 +9,7 @@ services:
       - LOG_DIR=/var/log/bot
     ports:
       - '8001:8001'
-    command: sh -c 'python main.py'
+    command: sh -c 'alembic upgrade head && python main.py'
     networks:
       - bot_network
     volumes:
@@ -20,6 +20,8 @@ services:
       driver: "json-file"
       options:
         max-size: "20m"
+    depends_on:
+      - psql_db
 
   redis_tg_bot_db:
     image: redis:alpine
