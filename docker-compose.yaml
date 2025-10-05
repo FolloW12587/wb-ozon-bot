@@ -25,7 +25,7 @@ services:
 
   redis_tg_bot_db:
     image: redis:alpine
-    restart: on-failure
+    restart: always
     networks:
       - bot_network
     cpus: '0.5'
@@ -44,6 +44,7 @@ services:
 
   arq_high:
     build: .
+    restart: always
     env_file:
       - ./.env
     environment:
@@ -61,6 +62,7 @@ services:
 
   arq_low:
     build: .
+    restart: always
     env_file:
       - ./.env
     environment:
@@ -78,6 +80,7 @@ services:
 
   arq_popular:
     build: .
+    restart: always
     env_file:
       - ./.env
     environment:
@@ -95,7 +98,7 @@ services:
 
   psql_db:
     image: postgres:14
-    # restart: always
+    restart: always
     networks:
       - bot_network
     # ports:
