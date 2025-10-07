@@ -17,8 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot22 import bot
 
-from commands.send_message import notify_admins
+from commands.send_message import notify_admins, send_message
 
+import config
 from db.base import (
     Punkt,
     User,
@@ -379,6 +380,10 @@ async def add_user(
         await handle_referal_invitation(user, utm_source, session)
         return True
 
+    if utm_source == "prev_user":
+        await handle_prev_user(user)
+        return True
+
     utm_repo = UTMRepository(session)
     utms = await utm_repo.get_by_keitaro_id(utm_source)
 
@@ -480,6 +485,32 @@ async def handle_referal_invitation(
             text=(
                 f"Пользователь @{md.quote(invited_user.username or str(invited_user.tg_id))} "
                 f"пришел по рефералке от @{md.quote(inviter.username or str(inviter.tg_id))}"
+            )
+        )
+    )
+
+
+async def handle_prev_user(user: User):
+    logger.info("User returned after server crash %s", user.tg_id)
+    message = f"""
+Приветствуем!
+Наш сервер, на котором размещался бот НаСкидку, подвергся взлому. Сейчас мы активно занимаемся восстановлением его работы.
+
+🔧 *Ориентировочное восстановление*: четверг, *9 октября 2025 года.*
+Приносим извинения за временные неудобства 🙏
+
+Если у вас была активная подписка, пожалуйста, напишите в нашу \
+[техническую поддержку]({config.SUPPORT_BOT_URL}) — мы восстановим доступ и добавим \
++1 месяц подписки в подарок.
+
+Спасибо за понимание 🙌
+"""
+    await send_message(user.tg_id, MessageInfo(text=message))
+    await notify_admins(
+        MessageInfo(
+            text=(
+                f"Пользователь @{md.quote(user.username or str(user.tg_id))} "
+                f"проявил активность после взлома"
             )
         )
     )
