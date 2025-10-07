@@ -10,7 +10,7 @@ services:
       - LOG_DIR=/var/log/bot
     ports:
       - '8001:8001'
-    command: sh -c 'python main.py'
+    command: sh -c 'alembic upgrade head && python main.py'
     networks:
       - bot_network
     volumes:
