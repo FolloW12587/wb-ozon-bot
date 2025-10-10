@@ -8,30 +8,32 @@ from logger import logger
 from schemas import MessageInfo
 
 
-async def send_message(chat_id: int, message: MessageInfo) -> int:
+async def send_message(
+    chat_id: int, message: MessageInfo, parse_mode: str = "markdown"
+) -> int:
     if message.photo_id:
-        return await __send_photo(chat_id, message)
+        return await __send_photo(chat_id, message, parse_mode)
 
-    return await __send_message(chat_id, message)
+    return await __send_message(chat_id, message, parse_mode)
 
 
-async def __send_message(chat_id: int, message: MessageInfo) -> int:
+async def __send_message(chat_id: int, message: MessageInfo, parse_mode) -> int:
     msg = await bot.send_message(
         chat_id=chat_id,
         text=message.text,
         reply_markup=message.markup,
-        parse_mode="markdown",
+        parse_mode=parse_mode,
     )
     return msg.message_id
 
 
-async def __send_photo(chat_id: int, message: MessageInfo) -> int:
+async def __send_photo(chat_id: int, message: MessageInfo, parse_mode) -> int:
     msg = await bot.send_photo(
         chat_id=chat_id,
         photo=message.photo_id,
         caption=message.text,
         reply_markup=message.markup,
-        parse_mode="markdown",
+        parse_mode=parse_mode,
     )
     return msg.message_id
 
