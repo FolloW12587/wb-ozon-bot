@@ -478,11 +478,11 @@ class MessageSendingButton(Base):
     data = Column(String)
 
 
-sync_engine = create_engine(_db_url, echo=True)
+sync_engine = create_engine(_db_url, echo=False)
 
 Base.prepare(autoload_with=sync_engine)
 
-engine = create_async_engine(db_url, echo=True)
+engine = create_async_engine(db_url, echo=False)
 session = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 

@@ -1,10 +1,10 @@
 import asyncio
 
 from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
 from uvicorn import Config, Server
 from starlette.middleware.cors import CORSMiddleware
 
-from fastapi import FastAPI, Request
 
 from aiogram import Dispatcher, types
 
@@ -87,6 +87,7 @@ async def init_db():
 @app.on_event("startup")
 async def on_startup():
     await bot.delete_webhook()
+    logger.info("Setting webhook at url %s%s", config.PUBLIC_URL, WEBHOOK_PATH)
     await bot.set_webhook(
         f"{config.PUBLIC_URL}{WEBHOOK_PATH}", drop_pending_updates=True
     )
@@ -122,7 +123,7 @@ async def on_shutdown():
 # #Endpoint for incoming updates
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(update: dict):
-    # print('UPDATE FROM TG',update)
+    print('UPDATE FROM TG',update)
     tg_update = types.Update(**update)
     # print('TG UPDATE', tg_update, tg_update.__dict__)
     await dp.feed_update(bot=bot, update=tg_update)
