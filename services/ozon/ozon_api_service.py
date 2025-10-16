@@ -2,7 +2,7 @@ import json
 import re
 import aiohttp
 
-from utils.exc import OzonAPICrashError
+from utils.exc import OzonAPICrashError, OzonAPIAttemptsExceeded
 import config
 
 from services.ozon.dto import ProductDTO
@@ -18,7 +18,16 @@ class OzonAPIService:
             url += f"{del_zone}/"
 
         url += short_link
-        return await self.__make_get_response(url)
+        attempt = 1
+        while attempt < 4:
+            try:
+                return await self.__make_get_response(url)
+            except Exception:
+                attempt += 1
+                if attempt > 3:
+                    raise
+
+        raise OzonAPIAttemptsExceeded()
 
     async def get_delivery_zone(self, city_index: str) -> str:
         url = f"{config.OZON_API_URL}/pickUpPoint/{city_index}"
