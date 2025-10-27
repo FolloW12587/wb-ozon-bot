@@ -14,7 +14,7 @@ from db.repository.user import UserRepository
 from db.repository.user_subscription import UserSubscriptionRepository
 from services.yoomoney.yoomoney_service import YoomoneyService
 
-from utils.handlers import add_message_to_delete_dict
+from utils.handlers import add_message_to_delete_dict, check_user
 from keyboards import create_subscription_kb, create_or_add_exit_btn
 from payments.yoomoney import get_yoomoney_service
 
@@ -102,6 +102,8 @@ async def get_subscription_handler(
     state: FSMContext,
     bot: Bot,
 ):
+    await check_user(message, session, "prev_user")
+
     async with session:
         user_repo = UserRepository(session)
         user = await user_repo.find_by_id(message.from_user.id)

@@ -9,7 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 from aiogram import Dispatcher, types
 
 from background.base import get_redis_background_pool
-from db.base import engine, session, Base, get_session
+from db.base import engine, session, Base
 
 from middlewares.db import DbSessionMiddleware
 
@@ -17,23 +17,20 @@ from utils.pics import ImageManager
 from utils.storage import storage
 from utils.scheduler import (
     scheduler,
-    send_fake_price,
     setup_subscription_end_job,
     sync_popular_product_jobs,
     setup_subscription_is_about_to_end_job,
     setup_messages_sendigns_job,
 )
-from utils.utm import add_utm_to_db
 
 from payments.yoomoney import yoomoney_payment_notification_handler
 from deps import YoomoneyServiceDep
-
-from schemas import UTMSchema
 
 import config
 
 from handlers.base import main_router
 from handlers.subscription import router as payments_router
+from handlers.punkt import router as punkt_router
 
 from bot22 import bot
 from logger import logger
@@ -50,6 +47,7 @@ async def aiogram_global_error_handler(event: types.ErrorEvent):
 
 dp.include_router(payments_router)
 dp.include_router(main_router)
+dp.include_router(punkt_router)
 
 
 # #Add session and database connection in handlers
@@ -123,27 +121,10 @@ async def on_shutdown():
 # #Endpoint for incoming updates
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(update: dict):
-    print('UPDATE FROM TG',update)
+    # print("UPDATE FROM TG", update)
     tg_update = types.Update(**update)
     # print('TG UPDATE', tg_update, tg_update.__dict__)
     await dp.feed_update(bot=bot, update=tg_update)
-
-
-@app.post("/send_utm_data")
-async def send_utm_data(data: UTMSchema):
-    print("CATCH UTM", data.__dict__)
-    await add_utm_to_db(data)
-
-
-@app.get("/send_fake_notification")
-async def send_fake_notification_by_user(
-    user_id: int, product_id: int, fake_price: int, secret: str
-):
-
-    if secret == config.FAKE_NOTIFICATION_SECRET:
-        # print('CATCH UTM', data.__dict__)
-        async for session in get_session():
-            await send_fake_price(user_id, product_id, fake_price, session)
 
 
 @app.post("/payments/yoomoney_payment_notification")

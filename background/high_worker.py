@@ -2,6 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 from background.tasks import (
+    update_user_product_prices,
     new_add_product_task,
     add_popular_product,
     add_punkt_by_user,
@@ -36,6 +37,7 @@ async def shutdown(ctx):
 
 class WorkerSettings:
     functions = [
+        update_user_product_prices,
         new_add_product_task,
         add_popular_product,
         add_punkt_by_user,

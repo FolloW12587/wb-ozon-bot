@@ -17,7 +17,34 @@ async def send_message(
     return await __send_message(chat_id, message, parse_mode)
 
 
-async def __send_message(chat_id: int, message: MessageInfo, parse_mode) -> int:
+async def modify_message(
+    chat_id: int, message_id: int, message: MessageInfo, parse_mode: str = "markdown"
+) -> int | bool:
+    if message.photo_id:
+        return await __modify_message_media(chat_id, message_id, message)
+
+    return await __modify_message_text(chat_id, message_id, message, parse_mode)
+
+
+async def __modify_message_text(
+    chat_id: int, message_id: int, message: MessageInfo, parse_mode: str
+) -> int | bool:
+    msg = await bot.edit_message_text(
+        text=message.text, chat_id=chat_id, message_id=message_id, parse_mode=parse_mode
+    )
+    return msg if isinstance(msg, bool) else msg.message_id
+
+
+async def __modify_message_media(
+    chat_id: int, message_id: int, message: MessageInfo
+) -> int | bool:
+    msg = await bot.edit_message_media(
+        media=message.photo_id, chat_id=chat_id, message_id=message_id
+    )
+    return msg if isinstance(msg, bool) else msg.message_id
+
+
+async def __send_message(chat_id: int, message: MessageInfo, parse_mode: str) -> int:
     msg = await bot.send_message(
         chat_id=chat_id,
         text=message.text,

@@ -1,7 +1,8 @@
 import base64
-import aiohttp
 import json
+import aiohttp
 
+from services.wb.dto import ProductDTO
 from utils.exc import WbAPICrashError
 import config
 
@@ -38,3 +39,22 @@ class WbAPIService:
                     return await response.text()
             except TimeoutError as e:
                 raise WbAPICrashError("Timeout api") from e
+
+    def parse_product_data(self, data: dict):
+        d = data.get("data")
+
+        sizes = d.get("products")[0].get("sizes")
+
+        basic_price = product_price = None
+
+        for size in sizes:
+            _price = size.get("price")
+
+            if _price:
+                basic_price = size.get("price").get("basic")
+                product_price = size.get("price").get("product")
+
+                basic_price = str(basic_price)[:-2]
+                product_price = str(product_price)[:-2]
+
+        return ProductDTO(actual_price=product_price, basic_price=basic_price)

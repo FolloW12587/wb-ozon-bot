@@ -55,7 +55,7 @@ async def __process_message_sending(
 ):
     logger.info("Starting to process %s sending, is_test: %s", sending.id, is_test)
     sending.status = MessageSendingStatus.PROCESSING
-    await ms_repo.update(
+    await ms_repo.update_old(
         sending.id, status=MessageSendingStatus.PROCESSING, error_message=""
     )
 
@@ -66,7 +66,7 @@ async def __process_message_sending(
         logger.error(
             "Error in creating keyboard to test sending %s", sending.id, exc_info=True
         )
-        await ms_repo.update(
+        await ms_repo.update_old(
             sending.id,
             status=MessageSendingStatus.FAILED,
             error_message=f"При создании кнопок для рассылки произошла ошибка:\n{str(e)}",
@@ -84,7 +84,7 @@ async def __process_message_sending(
         logger.error(
             "Error in getting photo_id for sending %s", sending.id, exc_info=True
         )
-        await ms_repo.update(
+        await ms_repo.update_old(
             sending.id,
             status=MessageSendingStatus.FAILED,
             error_message=f"При получении id для картинки для рассылки произошла ошибка:\n{str(e)}",
@@ -98,7 +98,7 @@ async def __process_message_sending(
     try:
         await __validate_message(message_info)
     except Exception as e:
-        await ms_repo.update(
+        await ms_repo.update_old(
             sending.id,
             status=MessageSendingStatus.FAILED,
             error_message=f"При валидации рассылки произошла ошибка:\n{str(e)}",
@@ -108,7 +108,7 @@ async def __process_message_sending(
         ) from e
 
     if is_test:
-        await ms_repo.update(
+        await ms_repo.update_old(
             sending.id,
             status=MessageSendingStatus.CREATED,
             error_message="",
@@ -116,7 +116,7 @@ async def __process_message_sending(
         return
 
     await __pre_message_sending(sending)
-    await ms_repo.update(
+    await ms_repo.update_old(
         sending.id,
         started_at=datetime.now(),
         users_to_notify=len(user_ids),
@@ -126,7 +126,7 @@ async def __process_message_sending(
         inactive_count = await set_users_as_inactive(user_ids, results, session)
     except Exception as e:
         logger.error("Error in mass sending %s", sending.id, exc_info=True)
-        await ms_repo.update(
+        await ms_repo.update_old(
             sending.id,
             status=MessageSendingStatus.FAILED,
             error_message=f"При выполнении рассылки произошла ошибка:\n{str(e)}",
@@ -137,7 +137,7 @@ async def __process_message_sending(
 
     await __post_message_sending(sending, len(user_ids), inactive_count)
 
-    await ms_repo.update(
+    await ms_repo.update_old(
         sending.id,
         status=MessageSendingStatus.COMPLETED,
         users_notified=len(user_ids) - inactive_count,

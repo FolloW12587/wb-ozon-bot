@@ -38,9 +38,7 @@ from schemas import MessageInfo
 from utils.pics import ImageManager
 
 from utils.exc import NotEnoughGraphicData
-from utils.scheduler import (
-    add_task_to_delete_old_message_for_users,
-)
+from utils.scheduler import add_task_to_delete_old_message_for_users
 
 from utils.any import send_data_to_yandex_metica
 
@@ -391,7 +389,7 @@ async def add_user(
         return True
 
     utm = utms[0]
-    await utm_repo.update(utm.id, user_id=message.from_user.id)
+    await utm_repo.update_old(utm.id, user_id=message.from_user.id)
     # send csv to yandex API
     await send_data_to_yandex_metica(utm.client_id, goal_id="bot_start")
     return True
@@ -404,7 +402,7 @@ async def check_user(
         repo = UserRepository(_session)
         user = await repo.find_by_id(message.from_user.id)
         if user:
-            await repo.update(user.tg_id, is_active=True)
+            await repo.update_old(user.tg_id, is_active=True)
             return True
 
         return await add_user(message, _session, utm_source)
@@ -451,7 +449,7 @@ async def handle_referal_invitation(
         logger.error("Can't find inviter user with id %s", inviter_id)
         return
 
-    await user_repo.update(invited_user.tg_id, invited_by_user=inviter_id)
+    await user_repo.update_old(invited_user.tg_id, invited_by_user=inviter_id)
     await session.refresh(invited_user)
     try:
         await give_users_free_referal_trial(

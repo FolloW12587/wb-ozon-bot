@@ -13,7 +13,7 @@ async def set_subscription_to_user_if_needed(
     now = datetime.now(timezone.utc).date()
     if user_subscription.active_from <= now <= user_subscription.active_to:
         logger.info("User subscription is set to %s", user_subscription.subscription_id)
-        await user_repo.update(
+        await user_repo.update_old(
             user.tg_id, subscription_id=user_subscription.subscription_id
         )
 

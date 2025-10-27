@@ -15,3 +15,10 @@ class UTMRepository(BaseRepository[UTM]):
         )
 
         return db_models.scalars().all()
+
+    async def get_by_user_id(self, user_id: int) -> UTM | None:
+        db_model = await self.session.execute(
+            select(self.model_class).where(self.model_class.user_id == user_id)
+        )
+
+        return db_model.scalars().first()

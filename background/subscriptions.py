@@ -78,7 +78,7 @@ async def drop_users_subscription(
         upj_repo = UserProductJobRepository(session)
 
         user.subscription_id = free_subscription.id
-        await repo.update(user.tg_id, subscription_id=free_subscription.id)
+        await repo.update_old(user.tg_id, subscription_id=free_subscription.id)
 
         for marker in ["ozon", "wb"]:
             products = await up_repo.get_marker_products(user.tg_id, marker)

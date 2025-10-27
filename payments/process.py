@@ -123,6 +123,6 @@ async def __process_order(
         active_to=active_to,
         order_id=order.id,
     )
-    await order_repo.update(order.id, status=OrderStatus.SUCCESS.value)
+    await order_repo.update_old(order.id, status=OrderStatus.SUCCESS.value)
 
     return user_subscription

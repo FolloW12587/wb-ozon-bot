@@ -1,7 +1,4 @@
-from background.tasks import (
-    push_check_ozon_popular_product,
-    push_check_wb_popular_product,
-)
+from background.tasks import push_check_price
 from background.base import redis_settings, _redis_pool, get_redis_background_pool
 
 
@@ -14,10 +11,7 @@ async def shutdown(ctx):
 
 
 class WorkerSettings:
-    functions = [
-        push_check_ozon_popular_product,
-        push_check_wb_popular_product,
-    ]
+    functions = [push_check_price]
     on_startup = startup
     on_shutdown = shutdown
     queue_name = "arq:popular"

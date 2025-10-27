@@ -24,7 +24,7 @@ class UserRepository(BaseRepository[User]):
 
         return db_models.scalars().all()
 
-    async def update(self, model_id: int, **kwargs):
+    async def update_old(self, model_id: int, **kwargs):
         await self.session.execute(
             update(self.model_class)
             .where(self.model_class.tg_id == model_id)
@@ -37,6 +37,17 @@ class UserRepository(BaseRepository[User]):
         await self.session.execute(
             delete(self.model_class).where(self.model_class.tg_id == model_id)
         )
+        await self.session.commit()
+
+    async def increase_product_count_for_user(self, user_id: int, marker: str):
+        stmt = update(self.model_class).where(self.model_class.tg_id == user_id)
+
+        if marker == "ozon":
+            stmt = stmt.values(ozon_total_count=self.model_class.ozon_total_count + 1)
+        else:
+            stmt = stmt.values(wb_total_count=self.model_class.wb_total_count + 1)
+
+        await self.session.execute(stmt)
         await self.session.commit()
 
     async def get_active(self) -> list[User]:

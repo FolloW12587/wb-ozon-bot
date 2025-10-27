@@ -34,7 +34,7 @@ class BaseRepository(Generic[M]):
 
         return db_models.scalars().all()
 
-    async def update(self, model_id: int | UUID, **kwargs):
+    async def update_old(self, model_id: int | UUID, **kwargs):
         await self.session.execute(
             update(self.model_class)
             .where(self.model_class.id == model_id)
@@ -42,6 +42,14 @@ class BaseRepository(Generic[M]):
         )
 
         await self.session.commit()
+
+    async def update(self, model: M) -> M:
+        await self.session.merge(model)
+        await self.session.flush()
+        await self.session.commit()
+
+        await self.session.refresh(model)
+        return model
 
     async def delete(self, db_model: M):
         await self.session.delete(db_model)
@@ -58,5 +66,5 @@ class BaseRepository(Generic[M]):
         return db_models.scalars().all()
 
     async def first(self) -> M | None:
-        result = await self.session.execute(select(self.model_class))
+        result = await self.session.execute(select(self.model_class).limit(1))
         return result.scalars().first()

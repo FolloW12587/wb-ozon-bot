@@ -24,6 +24,22 @@ class UserProductRepository(BaseRepository[UserProduct]):
 
         return result.scalars().first()
 
+    async def get_user_product_by_product_short_link(
+        self, user_id: int, product_short_link: str
+    ) -> UserProduct | None:
+        stmt = (
+            select(self.model_class)
+            .join(Product, UserProduct.product_id == Product.id)
+            .where(
+                Product.short_link == product_short_link,
+                UserProduct.user_id == user_id,
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+
+        return result.scalars().first()
+
     async def get_marker_products(self, user_id: int, marker: str) -> list[UserProduct]:
         stmt = (
             select(UserProduct)
