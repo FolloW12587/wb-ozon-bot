@@ -2,6 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+from background.tasks import update_user_product_prices
 from commands.subscription_mass_sending import (
     notify_users_that_subscription_ended,
     subscription_is_about_to_end,
@@ -106,4 +107,9 @@ async def drop_users_punkt(user: User, session: AsyncSession):
     logger.info("Dropping punkt for user %s [%s]", user.username, user.tg_id)
     async with session:
         repo = PunktRepository(session)
+        punkt = await repo.get_users_punkt(user.tg_id)
+        if not punkt:
+            return
+
         await repo.delete_users_punkt(user.tg_id)
+        update_user_product_prices(None, user.tg_id)

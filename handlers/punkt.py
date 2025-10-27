@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
+from arq.connections import ArqRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # from handlers.base import get_settings
@@ -90,6 +91,7 @@ async def specific_punkt_block(
     state: FSMContext,
     session: AsyncSession,
     bot: Bot,
+    redis_pool: ArqRedis,
 ):
     await check_user(callback, session, "prev_user")
     data = await state.get_data()
@@ -151,15 +153,18 @@ async def specific_punkt_block(
         case "delete":
             is_success = await __delete_punkt(session, user_id)
 
-            if is_success:
+            if not is_success:
                 await callback.answer(
-                    text="✅ Пункт выдачи успешно удалён!", show_alert=True
+                    text="❌ Не получилось удалить пункт выдачи!", show_alert=True
                 )
-                # await get_settings(callback, state, session, bot)
                 return
 
             await callback.answer(
-                text="❌ Не получилось удалить пункт выдачи!", show_alert=True
+                text="✅ Пункт выдачи успешно удалён!", show_alert=True
+            )
+
+            await redis_pool.enqueue_job(
+                "update_user_product_prices", user_id, _queue_name="arq:high"
             )
 
 
@@ -169,7 +174,7 @@ async def add_punkt_proccess(
     state: FSMContext,
     session: AsyncSession,
     bot: Bot,
-    scheduler: AsyncIOScheduler,
+    redis_pool: ArqRedis,
 ):
     await check_user(message, session, "prev_user")
     data = await state.get_data()
@@ -235,8 +240,6 @@ async def add_punkt_proccess(
 
     punkt_data: dict = data.get("punkt_data")
 
-    # punkt_marker: str = punkt_data.get('punkt_marker')
-
     punkt_data.update(
         {
             "city": city.upper(),
@@ -257,15 +260,8 @@ async def add_punkt_proccess(
 
     await state.set_state()
 
-    scheduler.add_job(
-        background_task_wrapper,
-        trigger=DateTrigger(run_date=datetime.now()),
-        args=(
-            "add_punkt_by_user",
-            punkt_data,
-        ),
-        kwargs={"_queue_name": "arq:high"},
-        jobstore="sqlalchemy",
+    await redis_pool.enqueue_job(
+        "update_user_product_prices", punkt_data, _queue_name="arq:high"
     )
 
     await message.delete()

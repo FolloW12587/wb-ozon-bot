@@ -12,7 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import config
-from background.base import get_redis_background_pool, _redis_pool, get_redis_pool
+from background.base import get_redis_background_pool
 
 from db.base import (
     Category,

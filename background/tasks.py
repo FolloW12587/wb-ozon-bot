@@ -3,6 +3,7 @@ import asyncio
 from math import ceil
 from datetime import datetime, timedelta
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from commands.send_message import modify_message, send_message
@@ -20,6 +21,7 @@ from keyboards import (
     create_go_to_subscription_kb,
 )
 
+from background.base import get_redis_background_pool
 from bot22 import bot
 
 from schemas import MessageInfo
@@ -51,7 +53,7 @@ BOT_BATCH_ACTION_DELAY = 0.2
 
 async def new_add_product_task(ctx, user_data: dict):
     try:
-        scheduler = ctx.get("scheduler")
+        scheduler: AsyncIOScheduler = ctx.get("scheduler")
         product_marker: str = user_data.get("product_marker")
         _add_msg_id: int = user_data.get("_add_msg_id")
         msg: tuple = user_data.get("msg")
@@ -237,7 +239,7 @@ async def push_check_price(ctx, user_id, product_id: str):
 
 
 async def add_popular_product(cxt, product_data: dict):
-    scheduler = cxt.get("scheduler")
+    scheduler: AsyncIOScheduler = cxt.get("scheduler")
     product_marker: str = product_data.get("product_marker")
     print(f"from task {product_data}")
 
@@ -470,7 +472,7 @@ async def periodic_delete_old_message(_, user_id: int):
                 )
 
 
-async def add_punkt_by_user(_, punkt_data: dict):
+async def add_punkt_by_user(punkt_data: dict):
     punkt_action: str = punkt_data.get("punkt_action")
     city: str = punkt_data.get("city")
     city_index: str = punkt_data.get("index")
@@ -544,8 +546,13 @@ async def add_punkt_by_user(_, punkt_data: dict):
         text=text, chat_id=settings_msg[0], message_id=settings_msg[-1]
     )
 
+    redis_pool = await get_redis_background_pool()
+    await redis_pool.enqueue_job(
+        "update_user_product_prices", user_id, _queue_name="arq:high"
+    )
 
-async def update_user_product_prices(_, user_id: int):
+
+async def update_user_product_prices(user_id: int):
     logger.info("Updating user %s product prices", user_id)
 
     async for session in get_session():
