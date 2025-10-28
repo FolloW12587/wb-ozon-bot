@@ -102,7 +102,7 @@ async def get_subscription_handler(
     state: FSMContext,
     bot: Bot,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
 
     async with session:
         user_repo = UserRepository(session)

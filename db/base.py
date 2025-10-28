@@ -236,7 +236,7 @@ class ProductPrice(Base):
     product_id = Column(BigInteger, ForeignKey("products.id"))
     price = Column(Integer)
     time_price = Column(TIMESTAMP(timezone=True))
-    city = Column(String)
+    city = Column(String, default="МОСКВА")
 
     product = relationship(Product, back_populates="product_prices")
 

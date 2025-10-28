@@ -1,11 +1,7 @@
-from datetime import datetime
 from aiogram import Router, types, Bot, F
 
 from aiogram.filters import and_f
 from aiogram.fsm.context import FSMContext
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.date import DateTrigger
 
 from arq.connections import ArqRedis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,11 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from states import PunktState
 from keyboards import create_go_to_subscription_kb, create_or_add_exit_btn
 
+import config
 from logger import logger
 
 from utils.cities import city_index_dict
 from utils.handlers import add_message_to_delete_dict, check_user
-from utils.scheduler import background_task_wrapper
 from utils.subscription import get_user_subscription_option
 
 from db.repository.punkt import PunktRepository
@@ -93,7 +89,7 @@ async def specific_punkt_block(
     bot: Bot,
     redis_pool: ArqRedis,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     settings_msg: tuple = data.get("settings_msg")
@@ -176,7 +172,7 @@ async def add_punkt_proccess(
     bot: Bot,
     redis_pool: ArqRedis,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     settings_msg: tuple = data.get("settings_msg")

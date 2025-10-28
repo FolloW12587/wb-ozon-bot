@@ -74,7 +74,7 @@ from utils.handlers import (
     generate_graphic,
     generate_pretty_amount,
     check_user,
-    new_check_has_punkt,
+    get_users_punkt_city,
     new_show_product_list,
     try_delete_faq_messages,
     try_delete_prev_list_msgs,
@@ -174,7 +174,7 @@ async def delete_popular_product(
     session: AsyncSession,
     scheduler: AsyncIOScheduler,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     _, marker, popular_product_id = callback.data.split(":")
 
     scheduler_job_id = f"popular_{marker}_{popular_product_id}"
@@ -209,7 +209,7 @@ async def proccess_location(
     session: AsyncSession,
     state: FSMContext,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
     print(message.__dict__)
     print(message.location)
     await state.set_state()
@@ -222,7 +222,7 @@ async def get_faq(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     await try_delete_faq_messages(data)
@@ -249,7 +249,7 @@ async def back_to_faq(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     question_msg_list: list[int] = data.get("question_msg_list")
@@ -280,7 +280,7 @@ async def exit_faq(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     question_msg_list: list[int] = data.get("question_msg_list")
@@ -310,7 +310,7 @@ async def question_callback(
     bot: Bot,
     image_manager: ImageManager,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     await try_delete_faq_messages(data)
@@ -367,7 +367,7 @@ async def get_all_products_by_user(
     state: FSMContext,
     session: AsyncSession,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
     await try_delete_prev_list_msgs(message.chat.id, state)
     await state.update_data(view_product_dict=None)
 
@@ -417,13 +417,8 @@ async def get_all_products_by_user(
 
     product_list = list(map(tuple, product_list))
 
-    try:
-        wb_product_count = sum(1 for product in product_list if product[6] == "wb")
-        ozon_product_count = len_product_list - wb_product_count
-    except Exception as ex:
-        print("sum eror", ex)
-        wb_product_count = 0
-        ozon_product_count = len_product_list
+    wb_product_count = sum(1 for product in product_list if product[6] == "wb")
+    ozon_product_count = len_product_list - wb_product_count
 
     pages = ceil(len_product_list / DEFAULT_PAGE_ELEMENT_COUNT)
     current_page = 1
@@ -452,7 +447,7 @@ async def get_settings(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
     _text = "⚙️Ваши настройки⚙️\n\n<b>Выберите нужный раздел</b>"
     _kb = create_settings_kb()
 
@@ -501,7 +496,7 @@ async def specific_settings_block(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     settings_marker = callback.data.split("_")[-1]
 
     match settings_marker:
@@ -528,7 +523,7 @@ async def __settings_punkt_handler(
 
     async with session as _session:
         # Если у пользователя платная подписка
-        city_punkt = await new_check_has_punkt(user_id=user_id, session=_session)
+        city_punkt = await get_users_punkt_city(user_id=user_id, session=_session)
 
         _kb = create_punkt_settings_block_kb(has_punkt=city_punkt)
         _kb = create_or_add_exit_btn(_kb)
@@ -620,7 +615,7 @@ async def new_pagination_page(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     product_dict: dict = data.get("view_product_dict")
@@ -646,7 +641,7 @@ async def new_go_to_selected_page(
     session: AsyncSession,
     state: FSMContext,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     selected_page = callback.data.split("_")[-1]
@@ -665,7 +660,7 @@ async def new_switch_page(
     session: AsyncSession,
     state: FSMContext,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     callback_data = callback.data.split("_")[-1]
 
     data = await state.get_data()
@@ -691,7 +686,7 @@ async def callback_cancel(
     session: AsyncSession,
     state: FSMContext,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     await state.set_state()
     try:
         await callback.message.delete()
@@ -707,7 +702,7 @@ async def callback_to_main(
     session: AsyncSession,
     state: FSMContext,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     await state.set_state()
     try:
         await callback.message.delete()
@@ -722,7 +717,7 @@ async def callback_close(
     callback: types.Message | types.CallbackQuery,
     session: AsyncSession,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     try:
         await callback.message.delete()
     except Exception as ex:
@@ -738,7 +733,7 @@ async def back_to_product(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     _callback_data = callback.data.split("_")
     print("from back_to_product", _callback_data)
     _callback_marker = "_".join(_callback_data[:-2])
@@ -757,7 +752,7 @@ async def new_back_to_product_list(
     state: FSMContext,
     session: AsyncSession,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     product_dict: dict = data.get("view_product_dict")
@@ -778,7 +773,7 @@ async def new_delete_callback(
     session: AsyncSession,
     scheduler: AsyncIOScheduler,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     with_redirect = True
 
     data = await state.get_data()
@@ -868,7 +863,7 @@ async def new_edit_sale_callback(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     callback_data = callback.data.split("_")
@@ -950,7 +945,7 @@ async def new_edit_sale_proccess(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
     data = await state.get_data()
 
     new_sale = message.text.strip()
@@ -1083,7 +1078,7 @@ async def view_graphic(
     session: AsyncSession,
     bot: Bot,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     user_id = callback.from_user.id
 
     message_id = callback.message.message_id
@@ -1223,7 +1218,7 @@ async def new_view_product(
     bot: Bot,
     is_background: bool = False,
 ):
-    await check_user(callback, session, "prev_user")
+    await check_user(callback, session, config.PREV_USER_UTM)
     print(callback.data)
 
     data = await state.get_data()
@@ -1390,7 +1385,7 @@ async def any_input(
     session: AsyncSession,
     redis_pool: ArqRedis,
 ):
-    await check_user(message, session, "prev_user")
+    await check_user(message, session, config.PREV_USER_UTM)
     print(message)
     if message.chat.type != "private":
         return

@@ -28,6 +28,8 @@ from db.base import (
     Product,
     UserProduct,
 )
+from db.repository.product_city_graphic import ProductCityGraphicRepository
+from db.repository.punkt import PunktRepository
 from db.repository.subscription import SubscriptionRepository
 from db.repository.user import UserRepository
 from db.repository.user_subscription import UserSubscriptionRepository
@@ -266,31 +268,17 @@ async def generate_graphic(
     fig.update_xaxes(
         tickvals=date_view_list, tickformat="%d-%m-%y", dtick="D1", tickangle=-45
     )
-
-    # fig.update_yaxes(tickvals=price_list,
-    #                  ticktext=[f'{price:,}'.replace(',', ' ') for price in price_list])
-
     fig.update_yaxes(ticktext=[f"{price:,}".replace(",", " ") for price in price_list])
-
-    # fig.update_layout(
-    #     yaxis=dict(
-    #         tickvals=y_data,  # Указываем значения для отображения
-    #         ticktext=[f"{price:.5f}" for price in y_data]  # Форматируем текст для отображения
-    #     )
-    # )
 
     # Сохраняем график как изображение
     filename = "plot.png"
-    fig.write_image("plot.png")
+    fig.write_image(filename)
 
     _kb = create_back_to_product_btn(
         user_id=user_id, product_id=product_id, is_background_task=is_background
     )
     _kb = create_or_add_exit_btn(_kb)
 
-    # photo_msg = await bot.send_photo(chat_id=user_id,
-    #                                  photo=types.FSInputFile(path=f'./{filename}'),
-    #                                  reply_markup=_kb.as_markup())
     photo_msg = await bot.edit_message_media(
         chat_id=user_id,
         message_id=message_id,
@@ -303,48 +291,23 @@ async def generate_graphic(
     if photo_msg.photo:
         photo_id = photo_msg.photo[0].file_id
 
-        check_graphic_query = select(ProductCityGraphic.id).where(
-            and_(
-                ProductCityGraphic.city == _city,
-                ProductCityGraphic.product_id == main_product_id,
-            )
-        )
         async with session as _session:
-            check_res = await _session.execute(check_graphic_query)
-
-        graphic_id = check_res.scalar_one_or_none()
-
-        if not graphic_id:
-
-            insert_data = {
-                "product_id": main_product_id,
-                "city": _city,
-                "photo_id": photo_id,
-                "time_create": datetime.now(),
-            }
-
-            final_query = insert(ProductCityGraphic).values(**insert_data)
-        else:
-            final_query = (
-                update(ProductCityGraphic)
-                .values(
-                    photo_id=photo_id,
-                    time_create=datetime.now(),
-                )
-                .where(
-                    ProductCityGraphic.id == graphic_id,
-                )
-            )
-
-        async with session as _session:
-            await _session.execute(final_query)
-            try:
-                await _session.commit()
-                print("add success")
+            pcg_repo = ProductCityGraphicRepository(_session)
+            graphic = await pcg_repo.get_by_product_id_and_city(main_product_id, _city)
+            if graphic:
+                graphic.photo_id = photo_id
+                graphic.time_create = datetime.now()
+                await pcg_repo.update(graphic)
                 return True
-            except Exception as ex:
-                await _session.rollback()
-                print("add error", ex)
+
+            graphic = ProductCityGraphic(
+                product_id=main_product_id,
+                city=_city,
+                photo_id=photo_id,
+                time_create=datetime.now(),
+            )
+            await pcg_repo.create(graphic)
+            return True
 
 
 async def add_user(
@@ -378,7 +341,7 @@ async def add_user(
         await handle_referal_invitation(user, utm_source, session)
         return True
 
-    if utm_source == "prev_user":
+    if utm_source == config.PREV_USER_UTM:
         await handle_prev_user(user)
         return True
 
@@ -517,25 +480,16 @@ __Пожалуйста, добавьте товары заново__ 🙏\.
     )
 
 
-async def new_check_has_punkt(user_id: int, session: AsyncSession):
+async def get_users_punkt_city(user_id: int, session: AsyncSession) -> str | None:
+    punkt_repo = PunktRepository(session)
+    punkt = await punkt_repo.get_users_punkt(user_id)
 
-    query = select(
-        Punkt.city,
-    ).where(Punkt.user_id == user_id)
-
-    res = await session.execute(query)
-
-    city_punkt = res.scalar_one_or_none()
-
-    return city_punkt
+    return punkt.city if punkt else None
 
 
 # new
 async def new_show_product_list(product_dict: dict, user_id: int, state: FSMContext):
     data = await state.get_data()
-
-    # print('data' ,data)
-    # print('product_dict', product_dict)
 
     current_page = product_dict.get("current_page")
     product_list = product_dict.get("product_list")
@@ -568,16 +522,21 @@ async def new_show_product_list(product_dict: dict, user_id: int, state: FSMCont
 
     product_on_current_page_count = len(product_list_for_page)
 
-    _text = f"Ваши товары\n\nВсего товаров: {len_product_list}\nПоказано {product_on_current_page_count} товар(a/ов)"
+    _text = (
+        f"Ваши товары\n\nВсего товаров: {len_product_list}\n"
+        f"Показано {product_on_current_page_count} товар(a/ов)"
+    )
 
-    _text = f"📝 Список ваших товаров:\n\n🔽 Всего товаров: {len_product_list}\n\n🔵 Товаров с Ozon: {ozon_product_count}\n🟣 Товаров с Wildberries: {wb_product_count}\n\nПоказано {product_on_current_page_count} товаров на странице, нажмите ▶, чтобы листать список"
+    _text = (
+        f"📝 Список ваших товаров:\n\n🔽 Всего товаров: {len_product_list}\n\n"
+        f"🔵 Товаров с Ozon: {ozon_product_count}\n"
+        f"🟣 Товаров с Wildberries: {wb_product_count}\n\n"
+        f"Показано {product_on_current_page_count} товаров на странице, нажмите ▶, "
+        "чтобы листать список"
+    )
 
     photo_id = await image_manager.get_default_product_list_photo_id()
     if not list_msg:
-        # list_msg: types.Message = await bot.send_message(chat_id=user_id,
-        #                                                  text=_text,
-        #                                                  reply_markup=_kb.as_markup())
-
         list_msg: types.Message = await bot.send_photo(
             chat_id=user_id,
             photo=photo_id,
@@ -599,10 +558,6 @@ async def new_show_product_list(product_dict: dict, user_id: int, state: FSMCont
         await state.update_data(list_msg_on_delete=list_msg_on_delete)
 
     else:
-        # await bot.edit_message_text(chat_id=user_id,
-        #                             message_id=list_msg[-1],
-        #                             text=_text,
-        #                             reply_markup=_kb.as_markup())
         await bot.edit_message_media(
             chat_id=user_id,
             media=types.InputMediaPhoto(media=photo_id, caption=_text),
