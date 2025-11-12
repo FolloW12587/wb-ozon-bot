@@ -127,6 +127,8 @@ class OzonAPIService:
             name = match.group(2)
             short_link = match.group(3)
         else:
+            with open("answer.txt", "w") as w:
+                w.write(raw_data)
             raise OzonAPIParseError()
 
         return ProductDTO(
