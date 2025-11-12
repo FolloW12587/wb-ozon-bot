@@ -11,7 +11,7 @@ async def sync_user_product_jobs():
             if (
                 args
                 and isinstance(args[0], str)
-                and args[0].startswith("push_check_")
+                and args[0].startswith("new_push_check_")
                 and args[0].endswith("_price")
             ):
                 # Меняем только первый аргумент
