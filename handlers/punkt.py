@@ -257,7 +257,7 @@ async def add_punkt_proccess(
     await state.set_state()
 
     await redis_pool.enqueue_job(
-        "update_user_product_prices", punkt_data, _queue_name="arq:high"
+        "add_punkt_by_user", punkt_data, _queue_name="arq:high"
     )
 
     await message.delete()

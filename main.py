@@ -46,8 +46,8 @@ async def aiogram_global_error_handler(event: types.ErrorEvent):
 
 
 dp.include_router(payments_router)
-dp.include_router(main_router)
 dp.include_router(punkt_router)
+dp.include_router(main_router)
 
 
 # #Add session and database connection in handlers

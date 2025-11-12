@@ -146,7 +146,7 @@ async def push_check_price(ctx, user_id, product_id: str):
         punkt = await punkt_repo.get_users_punkt(user_id)
 
     city = punkt.city if punkt else None
-    _product_price = get_product_price(product, punkt)
+    _product_price = await get_product_price(product, punkt)
     if not _product_price:
         logger.info(
             "Can't get product price for user_porduct %s user %s", product_id, user_id
@@ -472,7 +472,7 @@ async def periodic_delete_old_message(_, user_id: int):
                 )
 
 
-async def add_punkt_by_user(punkt_data: dict):
+async def add_punkt_by_user(_, punkt_data: dict):
     punkt_action: str = punkt_data.get("punkt_action")
     city: str = punkt_data.get("city")
     city_index: str = punkt_data.get("index")
@@ -552,7 +552,7 @@ async def add_punkt_by_user(punkt_data: dict):
     )
 
 
-async def update_user_product_prices(user_id: int):
+async def update_user_product_prices(_, user_id: int):
     logger.info("Updating user %s product prices", user_id)
 
     async for session in get_session():
@@ -579,7 +579,7 @@ async def update_user_product_prices(user_id: int):
         user_products = await user_prod_repo.get_user_products(user_id)
         not_updated_products: list[Product] = []
         for user_product in user_products:
-            product = prod_repo.find_by_id(user_product.product_id)
+            product = await prod_repo.find_by_id(user_product.product_id)
             if not product:
                 logger.error(
                     "Ошибка при получении данных продукта пользователя %s",
@@ -619,6 +619,7 @@ async def __update_product_price(
         user_product.last_send_price = None
 
         await user_product_repo.update(user_product)
+        return True
     except Exception:
         logger.error(
             "Error in updating product price for user_product %s",

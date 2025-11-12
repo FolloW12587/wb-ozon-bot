@@ -9,9 +9,9 @@ from services.wb.wb_api_service import WbAPIService
 
 async def get_product_price(product: Product, punkt: Punkt | None) -> int | None:
     if product.product_marker == "ozon":
-        return get_ozon_product_price(product, punkt)
+        return await get_ozon_product_price(product, punkt)
 
-    return get_wb_product_price(product, punkt)
+    return await get_wb_product_price(product, punkt)
 
 
 async def get_ozon_product_price(product: Product, punkt: Punkt | None) -> int | None:
