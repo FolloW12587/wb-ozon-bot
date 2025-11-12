@@ -2,7 +2,7 @@ import json
 import re
 import aiohttp
 
-from utils.exc import OzonAPICrashError, OzonAPIAttemptsExceeded
+from utils.exc import OzonAPICrashError, OzonAPIAttemptsExceeded, OzonAPIParseError
 import config
 
 from services.ozon.dto import ProductDTO
@@ -51,7 +51,7 @@ class OzonAPIService:
             except TimeoutError as e:
                 raise OzonAPICrashError("API timeout occured") from e
 
-    def parse_product_data(self, raw_data: str) -> ProductDTO:
+    def parse_product_data_old(self, raw_data: str) -> ProductDTO:
         short_link = raw_data.split("|")[0]
 
         response_data = raw_data.split("|", maxsplit=1)[-1]
@@ -106,6 +106,35 @@ class OzonAPIService:
             actual_price=int(price),
             start_price=int(price),
             basic_price=int(price),
+            photo_url=photo_url,
+        )
+
+    def parse_product_data(self, raw_data: str) -> ProductDTO:
+        # pattern = r"data-state='(\{\\\"mainPrice.*?\})'"
+        pattern = r"\>([\d\ \ ]*)[\ \ ]₽"
+        match = re.search(pattern, raw_data, re.DOTALL)
+        if match:
+            price_str = match.group(1)
+        else:
+            raise OzonAPIParseError()
+
+        price = int("".join(price_str.split()))
+
+        pattern = r"\\\"image\\\":\\\"(.*?)\\\",\\\"name\\\":\\\"(.*?)\\\",\\\"offers\\\":.*?\\\"url\\\":\\\"https:\/\/www\.ozon\.ru\/product\/(.*?)\/\\\""
+        match = re.search(pattern, raw_data, re.DOTALL)
+        if match:
+            photo_url = match.group(1)
+            name = match.group(2)
+            short_link = match.group(3)
+        else:
+            raise OzonAPIParseError()
+
+        return ProductDTO(
+            short_link=short_link,
+            name=name,
+            actual_price=price,
+            start_price=price,
+            basic_price=price,
             photo_url=photo_url,
         )
 

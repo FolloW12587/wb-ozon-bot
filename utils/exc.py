@@ -10,6 +10,10 @@ class OzonAPIAttemptsExceeded(Exception):
     pass
 
 
+class OzonAPIParseError(Exception):
+    pass
+
+
 class WbAPICrashError(Exception):
     pass
 
