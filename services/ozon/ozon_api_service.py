@@ -120,15 +120,13 @@ class OzonAPIService:
 
         price = int("".join(price_str.split()))
 
-        pattern = r"\\\"image\\\":\\\"(.*?)\\\",\\\"name\\\":\\\"(.*?)\\\",\\\"offers\\\":.*?\\\"url\\\":\\\"https:\/\/www\.ozon\.ru\/product\/(.*?)\/\\\""
+        pattern = r"\"image\":\"(.*?)\",\"name\":\"(.*?)\",\"offers\":.*?\"url\":\"https:\/\/www\.ozon\.ru\/product\/(.*?)\/\""
         match = re.search(pattern, raw_data, re.DOTALL)
         if match:
             photo_url = match.group(1)
             name = match.group(2)
             short_link = match.group(3)
         else:
-            with open("answer.txt", "w") as w:
-                w.write(raw_data)
             raise OzonAPIParseError()
 
         return ProductDTO(
