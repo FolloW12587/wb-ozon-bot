@@ -149,7 +149,7 @@ async def push_check_price(ctx, user_id, product_id: str):
     _product_price = await get_product_price(product, punkt)
     if not _product_price:
         logger.info(
-            "Can't get product price for user_porduct %s user %s", product_id, user_id
+            "Can't get product price for user_product %s user %s", product_id, user_id
         )
         return
 

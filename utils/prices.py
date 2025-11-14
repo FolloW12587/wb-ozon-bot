@@ -24,7 +24,10 @@ async def get_ozon_product_price(product: Product, punkt: Punkt | None) -> int |
         data = api_service.parse_product_data(res)
     except Exception:
         logger.error(
-            "Can't get product price for ozon product %s for zone %s", product.id, zone
+            "Can't get product price for ozon product %s for zone %s",
+            product.id,
+            zone,
+            exc_info=True,
         )
         return None
 
@@ -40,7 +43,10 @@ async def get_wb_product_price(product: Product, punkt: Punkt | None) -> int | N
         data = api_service.parse_product_data(res)
     except Exception:
         logger.error(
-            "Can't get product price for wb product %s for zone %s", product.id, zone
+            "Can't get product price for wb product %s for zone %s",
+            product.id,
+            zone,
+            exc_info=True,
         )
         return None
 
