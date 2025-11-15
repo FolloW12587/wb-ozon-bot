@@ -217,7 +217,7 @@ async def push_check_price(ctx, user_id, product_id: str):
         user_id=user_id,
         product_id=product_id,
         marker=product.product_marker,
-        job_id=ctx["job_id"],
+        job_id=f"{user_id}:{product.product_marker}:{product_id}",
         with_redirect=False,
     )
 
