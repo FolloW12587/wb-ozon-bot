@@ -1407,6 +1407,21 @@ async def any_input(
     check_link = check_input_link(link)
 
     if check_link:
+        if check_link.lower() == "ozon":
+            try:
+                text = (
+                    "⚠️ *Отслеживание Ozon временно недоступно*\n\n"
+                    "Все дни простоя мы компенсируем подписчикам."
+                    "Отслеживание WB работает, вы можете добавлять товары оттуда.\n\n"
+                    "Спасибо за понимание!"
+                )
+                msg = await message.answer(text, parse_mode="markdown")
+                await add_message_to_delete_dict(msg, state)
+                await message.delete()
+                return
+            except Exception as ex:
+                print(ex)
+
         sub_active_msg = await message.answer(text=f"{check_link} товар добавляется...")
 
         user_data = {
