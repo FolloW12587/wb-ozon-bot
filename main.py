@@ -28,9 +28,10 @@ from deps import YoomoneyServiceDep
 
 import config
 
-from handlers.base import main_router
-from handlers.subscription import router as payments_router
-from handlers.punkt import router as punkt_router
+# from handlers.base import main_router
+# from handlers.subscription import router as payments_router
+# from handlers.punkt import router as punkt_router
+from handlers.blocked import router
 
 from bot22 import bot
 from logger import logger
@@ -45,9 +46,10 @@ async def aiogram_global_error_handler(event: types.ErrorEvent):
     logger.exception("Unhandled aiogram exception", exc_info=event.exception)
 
 
-dp.include_router(payments_router)
-dp.include_router(punkt_router)
-dp.include_router(main_router)
+# dp.include_router(payments_router)
+# dp.include_router(punkt_router)
+# dp.include_router(main_router)
+dp.include_router(router)
 
 
 # #Add session and database connection in handlers
